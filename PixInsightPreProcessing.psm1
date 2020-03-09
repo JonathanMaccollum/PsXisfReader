@@ -306,3 +306,64 @@ P.noGUIMessages = true;
     }
 } 
 
+Function Invoke-PiLightCalibration
+{
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory=$true)][int]$PixInsightSlot,
+        [Parameter(Mandatory=$true)][System.IO.FileInfo[]]$Images,
+        [Parameter(Mandatory=$true)][System.IO.FileInfo]$MasterDark,
+        [Parameter(Mandatory=$true)][System.IO.FileInfo]$MasterFlat,
+        [Parameter(Mandatory=$true)][System.IO.DirectoryInfo]$OutputPath,
+        [Parameter(Mandatory=$false)][Switch]$KeepOpen
+    )
+    $masterDarkPath = Get-Item $MasterDark | Format-PiPath
+    $masterFlatPath = Get-Item $MasterFlat | Format-PiPath
+    $outputDirectory = Get-Item ($OutputPath.FullName) | Format-PiPath
+    $ImageDefinition = [string]::Join("`r`n   , ",
+    ($Images | ForEach-Object {
+        $x=$_|Format-PiPath
+        "[true, ""$x""]"
+    }))
+    $IntegrationDefinition = 
+    "var P = new ImageCalibration;
+P.pedestal = 0;
+P.pedestalMode = ImageCalibration.prototype.Keyword;
+P.masterBiasEnabled = false;
+P.masterDarkEnabled = true;
+P.masterDarkPath = `"$masterDarkPath`";
+P.masterFlatEnabled = true;
+P.masterFlatPath = `"$masterFlatPath`";
+P.calibrateBias = false;
+P.calibrateDark = false;
+P.calibrateFlat = false;
+P.optimizeDarks = false;
+P.darkOptimizationThreshold = 0.00000;
+P.darkOptimizationLow = 3.0000;
+P.darkOptimizationWindow = 1024;
+P.darkCFADetectionMode = ImageCalibration.prototype.DetectCFA;
+P.evaluateNoise = true;
+P.noiseEvaluationAlgorithm = ImageCalibration.prototype.NoiseEvaluation_MRS;
+P.outputDirectory = `"$outputDirectory`";
+P.outputExtension = `".xisf`";
+P.outputPostfix = `"_c`";
+P.outputSampleFormat = ImageCalibration.prototype.f32;
+P.outputPedestal = 0;
+P.overwriteExistingFiles = false;
+P.onError = ImageCalibration.prototype.Abort;
+P.noGUIMessages = true;
+    P.targetFrames= [`r`n     $ImageDefinition`r`n   ];
+    P.executeGlobal();"
+    $executionScript = New-TemporaryFile
+    $executionScript = Rename-Item ($executionScript.FullName) ($executionScript.FullName+".js") -PassThru
+    try {
+        $IntegrationDefinition|Out-File -FilePath $executionScript -Force 
+        Invoke-PICalibrationScript `
+            -path $executionScript `
+            -PixInsightSlot $PixInsightSlot `
+            -KeepOpen:$KeepOpen
+    }
+    finally {
+        Remove-Item $executionScript -Force
+    }
+} 
