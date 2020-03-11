@@ -480,7 +480,7 @@ Function Get-CalibrationFile
         [Parameter(Mandatory)][System.IO.DirectoryInfo]$CalibratedPath,
         [Parameter()][System.IO.DirectoryInfo[]]$AdditionalSearchPaths
     )
-    $calibratedFileName = $Path.Name.Substring($Path.Name.Length-$input.Extension.Length)+"_c.xisf"
+    $calibratedFileName = $Path.Name.Substring(0,$Path.Name.Length-$Path.Extension.Length)+"_c.xisf"
     $calibrated = Join-Path ($CalibratedPath.FullName) ($calibratedFileName)
     if(-not (test-path $calibrated) -and ($AdditionalSearchPaths)){
         $calibrated = $AdditionalSearchPaths | 
@@ -554,5 +554,83 @@ Function Invoke-LightFrameSorting
         [System.IO.Directory]::CreateDirectory($archive) >> $null
 
         $_.Group | Foreach-Object {Move-Item -Path $_.Path -Destination $archive}
+    }
+}
+Function Start-PiSubframeSelectorWeighting
+{
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory=$true)][int]$PixInsightSlot,
+        [Parameter(Mandatory=$true)][System.IO.FileInfo[]]$Images,
+        [Parameter(Mandatory=$true)][System.IO.DirectoryInfo]$OutputPath
+    )
+    $outputDirectory = Get-Item ($OutputPath.FullName) | Format-PiPath
+    $ImageDefinition = [string]::Join("`r`n   , ",
+    ($Images | ForEach-Object {
+        $x=$_|Format-PiPath
+        "[true, ""$x""]"
+    }))
+    $IntegrationDefinition = 
+    "var P = new SubframeSelector;
+    P.routine = SubframeSelector.prototype.MeasureSubframes;
+    P.fileCache = true;
+    P.subframeScale = 0.4800;
+    P.cameraGain = 1.0000;
+    P.cameraResolution = SubframeSelector.prototype.Bits12;
+    P.siteLocalMidnight = 24;
+    P.scaleUnit = SubframeSelector.prototype.ArcSeconds;
+    P.dataUnit = SubframeSelector.prototype.Electron;
+    P.structureLayers = 5;
+    P.noiseLayers = 0;
+    P.hotPixelFilterRadius = 1;
+    P.applyHotPixelFilter = false;
+    P.noiseReductionFilterRadius = 0;
+    P.sensitivity = 0.1000;
+    P.peakResponse = 0.8000;
+    P.maxDistortion = 0.5000;
+    P.upperLimit = 1.0000;
+    P.backgroundExpansion = 3;
+    P.xyStretch = 1.5000;
+    P.psfFit = SubframeSelector.prototype.Gaussian;
+    P.psfFitCircular = false;
+    P.pedestal = 0;
+    P.roiX0 = 0;
+    P.roiY0 = 0;
+    P.roiX1 = 0;
+    P.roiY1 = 0;
+    P.inputHints = `"`";
+    P.outputHints = `"`";
+    P.outputDirectory = `"$outputDirectory`";
+    P.outputExtension = `".xisf`";
+    P.outputPrefix = `"`";
+    P.outputPostfix = `"_a`";
+    P.outputKeyword = `"SSWEIGHT`";
+    P.overwriteExistingFiles = false;
+    P.onError = SubframeSelector.prototype.Continue;
+    P.approvalExpression = `"Stars>520 && FWHM< 4`";
+    P.weightingExpression = `"(30*(1-(FWHM-FWHMMin)/(FWHMMax-FWHMMin))\n`" +
+    `"+ 20*(1-(Eccentricity-EccentricityMin)/(EccentricityMax-EccentricityMin))\n`" +
+    `"+ 15*(SNRWeight-SNRWeightMin)/(SNRWeightMax-SNRWeightMin)\n`" +
+    `"+ 15*(1-(Median-MedianMin)/(MedianMax-MedianMin))\n`" +
+    `"+ 20*(Stars-StarsMin)/(StarsMax-StarsMin))\n`" +
+    `"+ 30`";
+    P.sortProperty = SubframeSelector.prototype.Weight;
+    P.graphProperty = SubframeSelector.prototype.Median;
+    P.subframes = [`r`n     $ImageDefinition`r`n   ];
+    P.measurements = [ // measurementIndex, measurementEnabled, measurementLocked, measurementPath, measurementWeight, measurementFWHM, measurementEccentricity, measurementSNRWeight, measurementMedian, measurementMedianMeanDev, measurementNoise, measurementNoiseRatio, measurementStars, measurementStarResidual, measurementFWHMMeanDev, measurementEccentricityMeanDev, measurementStarResidualMeanDev
+    ];
+    P.launch();
+    P.executeGlobal();"
+    $executionScript = New-TemporaryFile
+    $executionScript = Rename-Item ($executionScript.FullName) ($executionScript.FullName+".js") -PassThru
+    try {
+        $IntegrationDefinition|Out-File -FilePath $executionScript -Force 
+        Invoke-PICalibrationScript `
+            -path $executionScript `
+            -PixInsightSlot $PixInsightSlot `
+            -KeepOpen
+    }
+    finally {
+        Remove-Item $executionScript -Force
     }
 }
