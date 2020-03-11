@@ -79,3 +79,31 @@ $calibrated = $data |
         $subframeData    = Import-Csv -Path "$resultData"|sort-object {[double]$_.Weight} -Descending
         $subframeData|FT
     }
+
+    $stats = get-childitem $target *.data.csv |
+        import-csv |
+        foreach-object {
+            $x=$_
+            $y = Get-XisfFitsStats -Path ($x.File.Replace("/","\"))
+            Add-Member -InputObject $y -Name "Approved" -MemberType NoteProperty -Value ([bool]$x.Approved)
+            $y
+        } |
+        group-object Approved,Filter,Exposure |
+        foreach-object {
+            $approved=$_.Values[0]
+            $filter=$_.Values[1]
+            $exposure=$_.Values[2]
+            new-object psobject -Property @{
+                Approved=$approved
+                Filter=$filter
+                Exposure=$exposure
+                Exposures=$_.Group.Count
+                ExposureTime=([TimeSpan]::FromSeconds($_.Group.Count*$exposure))
+                Images=$_.Group
+            } } 
+    $stats|
+            Sort-Object Approved,Filter |
+            Format-Table Approved,Filter,Exposures,Exposure,ExposureTime
+    
+    [TimeSpan]::FromSeconds((
+            $stats|where-Object Approved -eq $true|foreach-object {$_.ExposureTime.TotalSeconds} |Measure-Object  -Sum).Sum).ToString()
