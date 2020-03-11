@@ -409,7 +409,28 @@ Function Invoke-DarkFlatFrameSorting
         $images | Foreach-Object {Move-Item -Path $_.Path -Destination "$targetDirectory\$flatDate"}
     }    
 }
+Function Get-XisfFile{
+    [CmdletBinding()]
+    param (
+        [System.IO.DirectoryInfo]$Path,
+        [Switch]$Recurse
+    )
+    Get-ChildItem -Path $Path -File -Filter *.xisf -Recurse:$Recurse |
+        foreach-object {
+            Get-XisfFitsStats -Path $_
+        }
+    
+}
 
+Function Get-XisfLightFrames{
+    [CmdletBinding()]
+    param (
+        [System.IO.DirectoryInfo]$Path,
+        [Switch]$Recurse
+    )
+    Get-XisfFile -Path:$Path -Recurse:$Recurse |
+        where-object ImageType -eq LIGHT
+}
 Function Invoke-FlatFrameSorting
 {
     [CmdletBinding()]
