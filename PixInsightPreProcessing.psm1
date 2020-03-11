@@ -1,4 +1,19 @@
-﻿Function Get-PixInsightInstance([int]$PixInsightSlot)
+﻿[CmdletBinding]
+Function Wait-PixInsightInstance([int]$PixInsightSlot)
+{
+    $x = Get-Process -Name "pixinsight" 
+    if($PixInsightSlot) {
+        $x = $x | where-object MainWindowTitle -eq "PixInsight ($PixInsightSlot)"
+    }
+    if($x) {
+        Add-Member -MemberType NoteProperty -Name "PixInsightSlot" -Value $PixInsightSlot -InputObject $x
+        while(-not $x.WaitForExit(1000)){
+            Write-Verbose "Waiting for PixInsighth slot $PixInsightSlot to exit."
+        }
+    }
+    $x
+}
+Function Get-PixInsightInstance([int]$PixInsightSlot)
 {
     $x = Get-Process -Name "pixinsight" 
     if($PixInsightSlot) {
@@ -37,11 +52,9 @@ Function Invoke-PixInsightScript
             Write-Verbose "Waiting for PixInsight to start slot $PixInsightSlot"
             Wait-Event -Timeout 1            
         }
-        while((Get-PixInsightInstance -PixInsightSlot $PixInsightSlot))
-        {
-            Write-Verbose "Waiting for completion of slot $PixInsightSlot"
-            Wait-Event -Timeout 1            
-        }
+        Write-Verbose "Waiting for completion of slot $PixInsightSlot"
+        Wait-PixInsightInstance -PixInsightSlot $PixInsightSlot >> $null
+        Write-Verbose "PixInsight slot $PixInsightSlot completed."
         Wait-Event -Timeout 2
     }
     finally
@@ -564,7 +577,8 @@ Function Invoke-LightFrameSorting
         }
 
         $objectNameParts = $object.Split(' ')
-        $archive = Join-Path $ArchiveDirectory "$($FocalLength)mm" -AdditionalChildPath $object
+        $archive = Join-Path $ArchiveDirectory "$($FocalLength)mm" 
+        $archive = Join-Path $archive $object
         if(-not (test-path $archive)){
             $archive = Join-Path $ArchiveDirectory "$($FocalLength)mm" -AdditionalChildPath ($objectNameParts[0] + ' '+ $objectNameParts[1])
         }
@@ -583,8 +597,23 @@ Function Start-PiSubframeSelectorWeighting
     param (
         [Parameter(Mandatory=$true)][int]$PixInsightSlot,
         [Parameter(Mandatory=$true)][System.IO.FileInfo[]]$Images,
-        [Parameter(Mandatory=$true)][System.IO.DirectoryInfo]$OutputPath
+        [Parameter(Mandatory=$true)][System.IO.DirectoryInfo]$OutputPath,
+        [Parameter(Mandatory=$false)][String]$WeightingExpression="(15*(1-(FWHM-FWHMMin)/(FWHMMax-FWHMMin))
+        + 25*(1-(Eccentricity-EccentricityMin)/(EccentricityMax-EccentricityMin))
+        + 15*(SNRWeight-SNRWeightMin)/(SNRWeightMax-SNRWeightMin)
+        + 20*(1-(Median-MedianMin)/(MedianMax-MedianMin))
+        + 10*(Stars-StarsMin)/(StarsMax-StarsMin))
+        + 30",
+        [Parameter(Mandatory=$false)][String]$ApprovalExpression="Median<70"
     )
+    $AE = "`""+
+        [String]::Join("\n`"`r`n +`"",
+        [Regex]::Split($ApprovalExpression, "`r`n|`r|`n")
+        )+"`""
+    $WE = "`""+
+        [String]::Join("\n`"`r`n +`"",
+        [Regex]::Split($WeightingExpression, "`r`n|`r|`n")
+        )+"`""
     $outputDirectory = Get-Item ($OutputPath.FullName) | Format-PiPath
     $ImageDefinition = [string]::Join("`r`n   , ",
     ($Images | ForEach-Object {
@@ -628,13 +657,8 @@ Function Start-PiSubframeSelectorWeighting
     P.outputKeyword = `"SSWEIGHT`";
     P.overwriteExistingFiles = false;
     P.onError = SubframeSelector.prototype.Continue;
-    P.approvalExpression = `"Stars>520 && FWHM< 4`";
-    P.weightingExpression = `"(30*(1-(FWHM-FWHMMin)/(FWHMMax-FWHMMin))\n`" +
-    `"+ 20*(1-(Eccentricity-EccentricityMin)/(EccentricityMax-EccentricityMin))\n`" +
-    `"+ 15*(SNRWeight-SNRWeightMin)/(SNRWeightMax-SNRWeightMin)\n`" +
-    `"+ 15*(1-(Median-MedianMin)/(MedianMax-MedianMin))\n`" +
-    `"+ 20*(Stars-StarsMin)/(StarsMax-StarsMin))\n`" +
-    `"+ 30`";
+    P.approvalExpression = $AE;
+    P.weightingExpression = $WE;
     P.sortProperty = SubframeSelector.prototype.Weight;
     P.graphProperty = SubframeSelector.prototype.Median;
     P.subframes = [`r`n     $ImageDefinition`r`n   ];
