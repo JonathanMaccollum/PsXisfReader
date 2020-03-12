@@ -576,16 +576,14 @@ Function Invoke-LightFrameSorting
                 -PixInsightSlot $PixInsightSlot
         }
 
-        $objectNameParts = $object.Split(' ')
         $archive = Join-Path $ArchiveDirectory "$($FocalLength)mm" 
-        $archive = Join-Path $archive $object
-        if(-not (test-path $archive)){
-            $archive = Join-Path $ArchiveDirectory "$($FocalLength)mm" -AdditionalChildPath ($objectNameParts[0] + ' '+ $objectNameParts[1])
+        $archiveObjectWithoutSpaces = Join-Path $archive ($object.Replace(' ',''))
+        if(test-path $archiveObjectWithoutSpaces){
+            $archive = $archiveObjectWithoutSpaces
+        }else{
+            $archive = join-path $archive $object
         }
-        if(-not (test-path $archive)){
-            $archive = Join-Path $ArchiveDirectory "$($FocalLength)mm" -AdditionalChildPath ($objectNameParts[0])
-        }
-        $archive = Join-Path $archive "$Exposure.00"
+        $archive = join-path $archive "$($exposure).00s"
         [System.IO.Directory]::CreateDirectory($archive) >> $null
 
         $_.Group | Foreach-Object {Move-Item -Path $_.Path -Destination $archive}
