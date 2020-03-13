@@ -85,7 +85,7 @@ $calibrated = $data |
         foreach-object {
             $x=$_
             $y = Get-XisfFitsStats -Path ($x.File.Replace("/","\"))
-            Add-Member -InputObject $y -Name "Approved" -MemberType NoteProperty -Value ([bool]$x.Approved)
+            Add-Member -InputObject $y -Name "Approved" -MemberType NoteProperty -Value ([bool]::parse($x.Approved))
             $y
         } |
         group-object Approved,Filter,Exposure |

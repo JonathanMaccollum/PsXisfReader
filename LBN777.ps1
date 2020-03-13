@@ -85,9 +85,11 @@ $calibrated = $data |
         foreach-object {
             $x=$_
             $y = Get-XisfFitsStats -Path ($x.File.Replace("/","\"))
-            Add-Member -InputObject $y -Name "Approved" -MemberType NoteProperty -Value ([bool]$x.Approved)
+            Add-Member -InputObject $y -Name "Approved" -MemberType NoteProperty -Value ([bool]::Parse($x.Approved))
             $y
-        } |
+        }
+    #$stats|FT
+    $summary = $stats |
         group-object Approved,Filter,Exposure |
         foreach-object {
             $approved=$_.Values[0]
@@ -101,9 +103,13 @@ $calibrated = $data |
                 ExposureTime=([TimeSpan]::FromSeconds($_.Group.Count*$exposure))
                 Images=$_.Group
             } } 
-    $stats|
+    $summary |
             Sort-Object Approved,Filter |
             Format-Table Approved,Filter,Exposures,Exposure,ExposureTime
-    
+
+    write-host "Rejected:"
     [TimeSpan]::FromSeconds((
-            $stats|where-Object Approved -eq $true|foreach-object {$_.ExposureTime.TotalSeconds} |Measure-Object  -Sum).Sum).ToString()
+        $summary|where-Object Approved -eq $false | foreach-object {$_.ExposureTime.TotalSeconds} |Measure-Object  -Sum).Sum).ToString()
+    write-host "Approved:"
+    [TimeSpan]::FromSeconds((
+            $summary|where-Object Approved -eq $true|foreach-object {$_.ExposureTime.TotalSeconds} |Measure-Object  -Sum).Sum).ToString()
