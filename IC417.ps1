@@ -35,8 +35,37 @@ if(-not (test-path $target\Subframe.csv)) {
     -Images $calibrated
 }
 
-$subframeResults = Get-Content -Path "$target\Subframe.csv"
-$subframeResults | Select-Object -Skip 29|Out-File -Path "$target\SubframeData.csv" -Force
+$subframeResults = Get-Content -Path "$target\Subframe2.csv"
+$subframeResults | Select-Object -Skip 29|Out-File -Path "$target\SubframeData2.csv" -Force
 $subframeResults | Select-Object -First 29
-$subframeData    = Import-Csv -Path "$target\SubframeData.csv"|sort-object {[double]$_.Weight} -Descending
+$subframeData    = Import-Csv -Path "$target\SubframeData2.csv"|sort-object {[double]$_.Weight} -Descending
 $subframeData|FT
+
+
+$stats = get-item "$target\SubframeData2.csv" |
+import-csv |
+foreach-object {
+    $x=$_
+    $y = Get-XisfFitsStats -Path ($x.File.Replace("/","\"))
+    Add-Member -InputObject $y -Name "Approved" -MemberType NoteProperty -Value ([bool]$x.Approved)
+    $y
+} |
+group-object Approved,Filter,Exposure |
+foreach-object {
+    $approved=$_.Values[0]
+    $filter=$_.Values[1]
+    $exposure=$_.Values[2]
+    new-object psobject -Property @{
+        Approved=$approved
+        Filter=$filter
+        Exposure=$exposure
+        Exposures=$_.Group.Count
+        ExposureTime=([TimeSpan]::FromSeconds($_.Group.Count*$exposure))
+        Images=$_.Group
+    } } 
+$stats|
+    Sort-Object Approved,Filter |
+    Format-Table Approved,Filter,Exposures,Exposure,ExposureTime
+
+[TimeSpan]::FromSeconds((
+    $stats|where-Object Approved -eq $true|foreach-object {$_.ExposureTime.TotalSeconds} |Measure-Object  -Sum).Sum).ToString()

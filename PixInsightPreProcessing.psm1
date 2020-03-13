@@ -338,7 +338,8 @@ Function Invoke-PiLightCalibration
         [Parameter(Mandatory=$true)][System.IO.FileInfo]$MasterDark,
         [Parameter(Mandatory=$true)][System.IO.FileInfo]$MasterFlat,
         [Parameter(Mandatory=$true)][System.IO.DirectoryInfo]$OutputPath,
-        [Parameter(Mandatory=$false)][Switch]$KeepOpen
+        [Parameter(Mandatory=$false)][Switch]$KeepOpen,
+        [Parameter()][int]$OutputPedestal=0
     )
     $masterDarkPath = Get-Item $MasterDark | Format-PiPath
     $masterFlatPath = Get-Item $MasterFlat | Format-PiPath
@@ -371,7 +372,7 @@ P.outputDirectory = `"$outputDirectory`";
 P.outputExtension = `".xisf`";
 P.outputPostfix = `"_c`";
 P.outputSampleFormat = ImageCalibration.prototype.f32;
-P.outputPedestal = 0;
+P.outputPedestal = $OutputPedestal;
 P.overwriteExistingFiles = false;
 P.onError = ImageCalibration.prototype.Abort;
 P.noGUIMessages = true;
@@ -543,7 +544,8 @@ Function Invoke-LightFrameSorting
         [Parameter(Mandatory)][System.IO.DirectoryInfo]$OutputPath,
 
         [Parameter(Mandatory)][int]$PixInsightSlot,
-        [System.IO.DirectoryInfo[]]$AdditionalSearchPaths
+        [System.IO.DirectoryInfo[]]$AdditionalSearchPaths,
+        [Parameter()][int]$OutputPedestal = 0
     )
 
     Get-ChildItem $DropoffLocation "*.xisf" |
@@ -573,6 +575,7 @@ Function Invoke-LightFrameSorting
                 -MasterDark $MasterDark `
                 -MasterFlat $MasterFlat `
                 -OutputPath $OutputPath `
+                -OutputPedestal $OutputPedestal `
                 -PixInsightSlot $PixInsightSlot
         }
 
