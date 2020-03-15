@@ -86,15 +86,16 @@ $calibrated = $data |
             $x=$_
             $y = Get-XisfFitsStats -Path ($x.File.Replace("/","\"))
             Add-Member -InputObject $y -Name "Approved" -MemberType NoteProperty -Value ([bool]::Parse($x.Approved))
+            Add-Member -InputObject $y -Name "Weight" -MemberType NoteProperty -Value ([decimal]::Parse($x.Weight))
             $y
         }
-    #$stats|FT
     $summary = $stats |
         group-object Approved,Filter,Exposure |
         foreach-object {
             $approved=$_.Values[0]
             $filter=$_.Values[1]
             $exposure=$_.Values[2]
+            $topWeight = $_.Group | sort-object Weight -Descending | select-object -first 1
             new-object psobject -Property @{
                 Approved=$approved
                 Filter=$filter
@@ -102,10 +103,11 @@ $calibrated = $data |
                 Exposures=$_.Group.Count
                 ExposureTime=([TimeSpan]::FromSeconds($_.Group.Count*$exposure))
                 Images=$_.Group
+                TopWeight = $topWeight.Path
             } } 
     $summary |
             Sort-Object Approved,Filter |
-            Format-Table Approved,Filter,Exposures,Exposure,ExposureTime
+            Format-Table Approved,Filter,Exposures,Exposure,ExposureTime,TopWeight
 
     write-host "Rejected:"
     [TimeSpan]::FromSeconds((
@@ -113,3 +115,7 @@ $calibrated = $data |
     write-host "Approved:"
     [TimeSpan]::FromSeconds((
             $summary|where-Object Approved -eq $true|foreach-object {$_.ExposureTime.TotalSeconds} |Measure-Object  -Sum).Sum).ToString()
+
+$data|foreach-object {([DateTime]$_.LocalDate).AddHours(-11)}|group-object Date|foreach-object {
+    
+}
