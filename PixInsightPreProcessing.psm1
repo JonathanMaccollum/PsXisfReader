@@ -680,3 +680,109 @@ Function Start-PiSubframeSelectorWeighting
         Remove-Item $executionScript -Force
     }
 }
+
+Function Invoke-PiStarAlignment
+{
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory=$true)][int]$PixInsightSlot,
+        [Parameter(Mandatory=$true)][System.IO.FileInfo[]]$Images,
+        [Parameter(Mandatory=$true)][System.IO.FileInfo]$ReferencePath,
+        [Parameter(Mandatory=$true)][System.IO.DirectoryInfo]$OutputPath,
+        [Parameter(Mandatory=$false)][Switch]$KeepOpen
+    )
+    $piReferencePath = Get-Item $ReferencePath | Format-PiPath
+    $outputDirectory = Get-Item ($OutputPath.FullName) | Format-PiPath
+    $ImageDefinition = [string]::Join("`r`n   , ",
+    ($Images | ForEach-Object {
+        $x=$_|Format-PiPath
+        "[true, true, ""$x""]"
+    }))
+    $CommandDefinition = 
+    "
+var P = new StarAlignment;
+P.structureLayers = 5;
+P.noiseLayers = 0;
+P.hotPixelFilterRadius = 1;
+P.noiseReductionFilterRadius = 0;
+P.sensitivity = 0.100;
+P.peakResponse = 0.80;
+P.maxStarDistortion = 0.500;
+P.upperLimit = 1.000;
+P.invert = false;
+P.distortionModel = `"`";
+P.undistortedReference = false;
+P.distortionCorrection = true;
+P.distortionMaxIterations = 20;
+P.distortionTolerance = 0.005;
+P.distortionAmplitude = 2;
+P.localDistortion = true;
+P.localDistortionScale = 256;
+P.localDistortionTolerance = 0.050;
+P.localDistortionRejection = 2.50;
+P.localDistortionRejectionWindow = 64;
+P.localDistortionRegularization = 0.010;
+P.matcherTolerance = 0.0500;
+P.ransacTolerance = 2.00;
+P.ransacMaxIterations = 2000;
+P.ransacMaximizeInliers = 1.00;
+P.ransacMaximizeOverlapping = 1.00;
+P.ransacMaximizeRegularity = 1.00;
+P.ransacMinimizeError = 1.00;
+P.maxStars = 0;
+P.fitPSF = StarAlignment.prototype.FitPSF_DistortionOnly;
+P.psfTolerance = 0.50;
+P.useTriangles = false;
+P.polygonSides = 5;
+P.descriptorsPerStar = 20;
+P.restrictToPreviews = false;
+P.intersection = StarAlignment.prototype.MosaicOnly;
+P.useBrightnessRelations = false;
+P.useScaleDifferences = false;
+P.scaleTolerance = 0.100;
+P.referenceImage = `"$piReferencePath`";
+P.referenceIsFile = true;
+P.inputHints = `"`";
+P.outputHints = `"`";
+P.mode = StarAlignment.prototype.RegisterMatch;
+P.writeKeywords = true;
+P.generateMasks = false;
+P.generateDrizzleData = true;
+P.generateDistortionMaps = false;
+P.frameAdaptation = false;
+P.randomizeMosaic = false;
+P.noGUIMessages = true;
+P.useSurfaceSplines = false;
+P.extrapolateLocalDistortion = true;
+P.splineSmoothness = 0.250;
+P.pixelInterpolation = StarAlignment.prototype.Auto;
+P.clampingThreshold = 0.30;
+P.outputDirectory = `"S:/PixInsight/Aligned`";
+P.outputExtension = `".xisf`";
+P.outputPrefix = `"`";
+P.outputPostfix = `"_r`";
+P.maskPostfix = `"_m`";
+P.distortionMapPostfix = `"_dm`";
+P.outputSampleFormat = StarAlignment.prototype.SameAsTarget;
+P.overwriteExistingFiles = false;
+P.onError = StarAlignment.prototype.Continue;
+P.useFileThreads = true;
+P.fileThreadOverload = 1.20;
+P.maxFileReadThreads = 1;
+P.maxFileWriteThreads = 1;
+P.outputDirectory = `"$outputDirectory`";
+P.targets= [`r`n     $ImageDefinition`r`n   ];
+P.executeGlobal();"
+    $executionScript = New-TemporaryFile
+    $executionScript = Rename-Item ($executionScript.FullName) ($executionScript.FullName+".js") -PassThru
+    try {
+        $CommandDefinition|Out-File -FilePath $executionScript -Force 
+        Invoke-PICalibrationScript `
+            -path $executionScript `
+            -PixInsightSlot $PixInsightSlot `
+            -KeepOpen:$KeepOpen
+    }
+    finally {
+        Remove-Item $executionScript -Force
+    }
+}

@@ -33,6 +33,7 @@ Function Read-XisfHeader([System.IO.BinaryReader]$reader)
 }
 Function Get-XisfFitsStats
 {
+    [CmdletBinding()]
     param
     (
         [Parameter(ValueFromPipeline=$true,Mandatory=$true)][System.IO.FileInfo]$Path,
@@ -76,6 +77,10 @@ Function Get-XisfFitsStats
                 $Cache.Add($Path.FullName,$result)
             }
             Write-Output $result
+        }
+        catch [System.Xml.XmlException]{
+            Write-Warning ("An error occured reading the file "+($Path.FullName))
+            Write-Verbose $_.Exception.ToString()
         }
         finally
         {
