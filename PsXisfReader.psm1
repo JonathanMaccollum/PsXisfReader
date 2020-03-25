@@ -70,6 +70,7 @@ Function Get-XisfFitsStats
                 FocalRatio=$fits.Where{$_.Name -eq 'FOCRATIO'}.value
                 ObsDate=$fits.Where{$_.Name -eq 'DATE-OBS'}.value
                 LocalDate=$fits.Where{$_.Name -eq 'DATE-LOC'}.value
+                SSWeight=$fits.Where{$_.Name -eq 'SSWEIGHT'}.value
                 Path=$Path
             }
             if($Cache)

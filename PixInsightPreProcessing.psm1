@@ -89,7 +89,7 @@ Function Invoke-PIIntegrationScript
     $scp = $Path|Format-PiPath
     $output=$OutputFile|Format-PiPath
     $Template="run -x $scp
-save integration -p=$output --nodialog --nomessages --noverify"
+save integration -p=`"$output`" --nodialog --nomessages --noverify"
     $ScriptToRun = New-TemporaryFile
     $ScriptToRun = Rename-Item ($ScriptToRun.FullName) ($ScriptToRun.FullName+".scp") -PassThru
     $Template|Out-File $ScriptToRun -Force
@@ -420,8 +420,12 @@ Function Invoke-DarkFlatFrameSorting
                 -PixInsightSlot $PixInsightSlot `
                 -OutputFile $masterDark
         }
-        $images | Foreach-Object {Move-Item -Path $_.Path -Destination "$targetDirectory\$flatDate"}
-    }    
+        $destinationDirectory=join-path $targetDirectory $flatDate
+        [System.IO.Directory]::CreateDirectory($destinationDirectory)>>$null
+        $images | Foreach-Object {
+            Move-Item -Path $_.Path -Destination $destinationDirectory
+        }
+    }
 }
 Function Get-XisfFile{
     [CmdletBinding()]
@@ -502,7 +506,9 @@ Function Invoke-FlatFrameSorting
                 -PixInsightSlot $PixInsightSlot `
                 -OutputFile $masterNoCalFlat
         }
-        $flats | Foreach-Object {Move-Item -Path $_.Path -Destination "$targetDirectory\$flatDate"}
+        $destinationDirectory=join-path $targetDirectory $flatDate
+        [System.IO.Directory]::CreateDirectory($destinationDirectory)>>$null
+        $flats | Foreach-Object {Move-Item -Path $_.Path -Destination $destinationDirectory}
     }
 }
 
@@ -569,7 +575,7 @@ Function Invoke-LightFrameSorting
             } |
             where-object {-not (Test-Path $_.Calibrated)} | foreach-object {$_.Path}
         if($toCalibrate){
-            Write-Host "Calibrating $($toCalibrate.Count) Light Frames for target $object"
+            Write-Host "Calibrating $($toCalibrate.Count)x$($Exposure)s $Filter Frames for target $object"
             Invoke-PiLightCalibration `
                 -Images $toCalibrate `
                 -MasterDark $MasterDark `
@@ -772,6 +778,7 @@ P.maxFileReadThreads = 1;
 P.maxFileWriteThreads = 1;
 P.outputDirectory = `"$outputDirectory`";
 P.targets= [`r`n     $ImageDefinition`r`n   ];
+P.launch();
 P.executeGlobal();"
     $executionScript = New-TemporaryFile
     $executionScript = Rename-Item ($executionScript.FullName) ($executionScript.FullName+".js") -PassThru
@@ -786,3 +793,96 @@ P.executeGlobal();"
         Remove-Item $executionScript -Force
     }
 }
+
+Function Invoke-PiLightIntegration
+{
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory=$true)][int]$PixInsightSlot,
+        [Parameter(Mandatory=$true)][System.IO.FileInfo[]]$Images,
+        [Parameter(Mandatory=$true)][System.IO.FileInfo]$OutputFile,
+        [Parameter(Mandatory=$false)][Switch]$KeepOpen
+    )
+    $ImageDefinition = [string]::Join("`r`n   , ",
+    ($Images | ForEach-Object {
+        $x=$_|Format-PiPath
+        "[true, ""$x"", """", """"]"
+    }))
+    $IntegrationDefinition = 
+    "var P = new ImageIntegration;
+    P.inputHints = `"`";
+    P.combination = ImageIntegration.prototype.Average;
+    P.weightMode = ImageIntegration.prototype.KeywordWeight;
+    P.weightKeyword = ""SSWEIGHT"";
+    P.weightScale = ImageIntegration.prototype.WeightScale_IKSS;
+    P.ignoreNoiseKeywords = false;
+    P.normalization = ImageIntegration.prototype.AdditiveWithScaling;
+    P.rejection = ImageIntegration.prototype.LinearFit;
+    P.rejectionNormalization = ImageIntegration.prototype.Scale;
+    P.minMaxLow = 1;
+    P.minMaxHigh = 1;
+    P.pcClipLow = 0.200;
+    P.pcClipHigh = 0.100;
+    P.sigmaLow = 4.000;
+    P.sigmaHigh = 2.000;
+    P.winsorizationCutoff = 5.000;
+    P.linearFitLow = 8.000;
+    P.linearFitHigh = 7.000;
+    P.esdOutliersFraction = 0.30;
+    P.esdAlpha = 0.05;
+    P.ccdGain = 1.00;
+    P.ccdReadNoise = 10.00;
+    P.ccdScaleNoise = 0.00;
+    P.clipLow = true;
+    P.clipHigh = true;
+    P.rangeClipLow = false;
+    P.rangeLow = 0.000000;
+    P.rangeClipHigh = false;
+    P.rangeHigh = 0.980000;
+    P.mapRangeRejection = true;
+    P.reportRangeRejection = false;
+    P.largeScaleClipLow = false;
+    P.largeScaleClipLowProtectedLayers = 2;
+    P.largeScaleClipLowGrowth = 2;
+    P.largeScaleClipHigh = false;
+    P.largeScaleClipHighProtectedLayers = 2;
+    P.largeScaleClipHighGrowth = 2;
+    P.generate64BitResult = false;
+    P.generateRejectionMaps = true;
+    P.generateIntegratedImage = true;
+    P.generateDrizzleData = false;
+    P.closePreviousImages = false;
+    P.bufferSizeMB = 16;
+    P.stackSizeMB = 1024;
+    P.autoMemorySize = false;
+    P.autoMemoryLimit = 0.75;
+    P.useROI = false;
+    P.roiX0 = 2376;
+    P.roiY0 = 765;
+    P.roiX1 = 3036;
+    P.roiY1 = 1293;
+    P.useCache = true;
+    P.evaluateNoise = true;
+    P.mrsMinDataFraction = 0.010;
+    P.subtractPedestals = true;
+    P.truncateOnOutOfRange = false;
+    P.noGUIMessages = true;
+    P.useFileThreads = true;
+    P.fileThreadOverload = 1.00;
+    P.images= [`r`n     $ImageDefinition`r`n   ];
+    P.launch();
+    P.executeGlobal();"
+    $executionScript = New-TemporaryFile
+    $executionScript = Rename-Item ($executionScript.FullName) ($executionScript.FullName+".js") -PassThru
+    try {
+        $IntegrationDefinition|Out-File -FilePath $executionScript -Force 
+        Invoke-PIIntegrationScript `
+            -path $executionScript `
+            -PixInsightSlot $PixInsightSlot `
+            -OutputFile $OutputFile `
+            -KeepOpen:$KeepOpen
+    }
+    finally {
+        Remove-Item $executionScript -Force
+    }
+} 
