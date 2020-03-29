@@ -392,6 +392,44 @@ P.noGUIMessages = true;
     }
 } 
 
+Function Invoke-DarkFrameSorting
+{
+    [CmdletBinding()]
+    param (
+        [System.IO.DirectoryInfo]$DropoffLocation,
+        [System.IO.DirectoryInfo]$ArchiveDirectory,
+        [int]$PixInsightSlot
+    )
+
+    Get-ChildItem $DropoffLocation "*.xisf" |
+    foreach-object { Get-XisfFitsStats -Path $_ } |
+    where-object ImageType -eq "DARK" |
+    group-object Instrument,Exposure,SetTemp |
+    foreach-object {
+        $images=$_.Group
+        $instrument=$images[0].Instrument.Trim().Trim("'")
+        $exposure=$images[0].Exposure.Trim()
+        $setTemp=($images[0].SetTemp)
+        $date = ([DateTime]$images[0].LocalDate).Date.ToString('yyyyMMdd')
+        $targetDirectory = "$ArchiveDirectory\DarkLibrary\$instrument"
+        [System.IO.Directory]::CreateDirectory($targetDirectory)>>$null
+        $masterDark = "$targetDirectory\$($date).MasterDark.$($setTemp)C.$($images.Count)x$($exposure)s.xisf"
+        if(-not (Test-Path $masterDark)) {
+            Write-Host "Integrating $($images.Count) Darks for $instrument at $setTemp duration $($exposure)s"
+            $darkFlats = $images | foreach-object {$_.Path}
+            Invoke-PiDarkIntegration `
+                -Images $darkFlats `
+                -PixInsightSlot $PixInsightSlot `
+                -OutputFile $masterDark
+        }
+        $destinationDirectory=join-path $targetDirectory $date
+        [System.IO.Directory]::CreateDirectory($destinationDirectory)>>$null
+        $images | Foreach-Object {
+            Move-Item -Path $_.Path -Destination $destinationDirectory
+        }
+    }
+}
+
 Function Invoke-DarkFlatFrameSorting
 {
     [CmdletBinding()]
@@ -544,6 +582,7 @@ Function Invoke-LightFrameSorting
         [Parameter(Mandatory)][int]$Exposure,
         [Parameter(Mandatory)][int]$Gain,
         [Parameter(Mandatory)][int]$Offset,
+        [Parameter(Mandatory)][int]$SetTemp,
 
         [Parameter(Mandatory)][System.IO.FileInfo]$MasterDark,
         [Parameter(Mandatory)][System.IO.FileInfo]$MasterFlat,
@@ -557,6 +596,7 @@ Function Invoke-LightFrameSorting
     Get-ChildItem $DropoffLocation "*.xisf" |
     foreach-object { Get-XisfFitsStats -Path $_ } |
     where-object ImageType -eq "Light" |
+    where-object SetTemp -eq $SetTemp |
     where-object Filter -eq $Filter |
     where-object Exposure -eq $Exposure |
     where-object CCDGain -eq $CCDGain |

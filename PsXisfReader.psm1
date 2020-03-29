@@ -61,11 +61,13 @@ Function Get-XisfFitsStats
             $result = new-object psobject -Property @{
                 Exposure=$fits.Where{$_.Name -eq 'EXPOSURE'}.value
                 Filter=$filter
+                Instrument=$fits.Where{$_.Name -eq 'INSTRUME'}.value
                 Object=$fits.Where{$_.Name -eq 'OBJECT'}.value
                 Gain=$fits.Where{$_.Name -eq 'GAIN'}.value
                 Offset=$fits.Where{$_.Name -eq 'OFFSET'}.value
                 ImageType=$fits.Where{$_.Name -eq 'IMAGETYP'}.value
                 CCDTemp=$fits.Where{$_.Name -eq 'CCD-TEMP'}.value
+                SetTemp=$fits.Where{$_.Name -eq 'SET-TEMP'}.value
                 FocalLength=$fits.Where{$_.Name -eq 'FOCALLEN'}.value
                 FocalRatio=$fits.Where{$_.Name -eq 'FOCRATIO'}.value
                 ObsDate=$fits.Where{$_.Name -eq 'DATE-OBS'}.value
