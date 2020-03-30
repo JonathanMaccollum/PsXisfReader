@@ -1,13 +1,13 @@
 import-module $PSScriptRoot/pixinsightpreprocessing.psm1 -Force
 import-module $PSScriptRoot/PsXisfReader.psm1
 
-$target="D:\Backups\Camera\Astrophotography\1000mm\NGC2805"
+$target="E:\Astrophotography\1000mm\NGC2805"
 $CalibrationPath = "S:\PixInsight\Calibrated"
 $WeightedOutputPath = "S:\PixInsight\Weighted"
 $BackupCalibrationPaths = @("T:\PixInsightLT\Calibrated","N:\PixInsightLT\Calibrated")
 
 $data = 
-    Get-XisfLightFrames -Path "D:\Backups\Camera\Astrophotography\1000mm\NGC2805" -Recurse |
+    Get-XisfLightFrames -Path "E:\Astrophotography\1000mm\NGC2805" -Recurse |
     where-object {-not $_.Path.FullName.ToLower().Contains("reject")} |
     where-object {-not $_.Path.FullName.ToLower().Contains("testing")} |
     where-object {-not $_.Path.FullName.ToLower().Contains("clouds")} |
