@@ -21,29 +21,6 @@ Invoke-FlatFrameSorting `
     -CalibratedFlatsOutput "E:\PixInsightLT\CalibratedFlats" `
     -PixInsightSlot 200
 
-    
-
-Invoke-LightFrameSorting `
-    -DropoffLocation $DropoffLocation -ArchiveDirectory $ArchiveDirectory `
-    -MasterDark "D:\Backups\Camera\ASI071mc-pro\MasterDark.NINA.240s.-15C_x20.Gain90Offset65.NoCalibration.xisf" `
-    -MasterFlat "D:\Backups\Camera\2019\20191130 - 135mm 071mc L3\MasterFlat.L3.xisf" `
-    -OutputPath $CalibratedOutput `
-    -Filter "L3" -FocalLength 135 -Exposure 240 -Gain 90 -Offset 65 -SetTemp -15 `
-    -PixInsightSlot 200
-Invoke-LightFrameSorting `
-    -DropoffLocation $DropoffLocation -ArchiveDirectory $ArchiveDirectory `
-    -MasterDark "D:\Backups\Camera\2019\Dark Library\20190313.60x120s.masterdark.-10c.90g.65o.nobias.xisf" `
-    -MasterFlat "D:\Backups\Camera\2019\20191130 - 135mm 071mc L3\MasterFlat.L3.xisf" `
-    -Filter "L3" -FocalLength 135 -Exposure 120 -Gain 90 -Offset 65 -SetTemp -10 `
-    -OutputPath $CalibratedOutput `
-    -PixInsightSlot 200
-Invoke-LightFrameSorting `
-    -DropoffLocation $DropoffLocation -ArchiveDirectory $ArchiveDirectory `
-    -MasterDark "D:\Backups\Camera\2019\Dark Library\20190313.60x30s.masterdark.-10c.90g.65o.nobias.integration.xisf" `
-    -MasterFlat "D:\Backups\Camera\2019\20191130 - 135mm 071mc L3\MasterFlat.L3.xisf" `
-    -Filter "L3" -FocalLength 135 -Exposure 30 -Gain 90 -Offset 65 -SetTemp -10 `
-    -OutputPath $CalibratedOutput `
-    -PixInsightSlot 200
 
 $('L','R','G','B')|foreach-object {
     Invoke-LightFrameSorting `
@@ -110,6 +87,7 @@ $('Ha','Oiii','Sii')|foreach-object {
         -OutputPath $CalibratedOutput `
         -PixInsightSlot 200
 }
+
 $('Ha')|foreach-object {
     Invoke-LightFrameSorting `
         -DropoffLocation $DropoffLocation -ArchiveDirectory $ArchiveDirectory `
@@ -117,5 +95,14 @@ $('Ha')|foreach-object {
         -MasterFlat "E:\Astrophotography\1000mm\Flats\20200306.MasterFlatCal.$_.xisf" `
         -Filter $_ -FocalLength 1000 -Exposure 240 -Gain 111 -Offset 8 -OutputPedestal 150 -SetTemp -15 `
         -OutputPath $CalibratedOutput `
-        -PixInsightSlot 200
+        -PixInsightSlot 200 -Verbose
+}
+$('Oiii','Sii')|foreach-object {
+    Invoke-LightFrameSorting `
+        -DropoffLocation $DropoffLocation -ArchiveDirectory $ArchiveDirectory `
+        -MasterDark "D:\Backups\Camera\ASI183mm-Pro\20191220\30x240s.-15C.G111.O8.masterdark.nocalibration.xisf" `
+        -MasterFlat "E:\Astrophotography\1000mm\Flats\20200406.MasterFlatCal.$_.xisf" `
+        -Filter $_ -FocalLength 1000 -Exposure 240 -Gain 111 -Offset 8 -OutputPedestal 150 -SetTemp -15 `
+        -OutputPath $CalibratedOutput `
+        -PixInsightSlot 200 -Verbose
 }

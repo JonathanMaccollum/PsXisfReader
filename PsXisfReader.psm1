@@ -71,6 +71,7 @@ Function Get-XisfFitsStats
                 FocalLength=$fits.Where{$_.Name -eq 'FOCALLEN'}.value
                 FocalRatio=$fits.Where{$_.Name -eq 'FOCRATIO'}.value
                 ObsDate=$fits.Where{$_.Name -eq 'DATE-OBS'}.value
+                ObsDateMinus12hr=([DateTime]($fits.Where{$_.Name -eq 'DATE-OBS'}.value.Trim("'"))).AddHours(-12).Date
                 LocalDate=$fits.Where{$_.Name -eq 'DATE-LOC'}.value
                 SSWeight=$fits.Where{$_.Name -eq 'SSWEIGHT'}.value
                 Path=$Path
