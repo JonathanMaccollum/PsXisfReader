@@ -841,7 +841,10 @@ Function Invoke-PiLightIntegration
         [Parameter(Mandatory=$true)][int]$PixInsightSlot,
         [Parameter(Mandatory=$true)][System.IO.FileInfo[]]$Images,
         [Parameter(Mandatory=$true)][System.IO.FileInfo]$OutputFile,
-        [Parameter(Mandatory=$false)][Switch]$KeepOpen
+        [Parameter(Mandatory=$false)][Switch]$KeepOpen,
+        [Parameter(Mandatory=$false)][decimal]$LinearFitLow=8,
+        [Parameter(Mandatory=$false)][decimal]$LinearFitHigh=7,
+        [Parameter(Mandatory=$false)][string]$Rejection = "LinearFit"
     )
     $ImageDefinition = [string]::Join("`r`n   , ",
     ($Images | ForEach-Object {
@@ -857,7 +860,7 @@ Function Invoke-PiLightIntegration
     P.weightScale = ImageIntegration.prototype.WeightScale_IKSS;
     P.ignoreNoiseKeywords = false;
     P.normalization = ImageIntegration.prototype.AdditiveWithScaling;
-    P.rejection = ImageIntegration.prototype.LinearFit;
+    P.rejection = ImageIntegration.prototype.$Rejection;
     P.rejectionNormalization = ImageIntegration.prototype.Scale;
     P.minMaxLow = 1;
     P.minMaxHigh = 1;
@@ -866,8 +869,8 @@ Function Invoke-PiLightIntegration
     P.sigmaLow = 4.000;
     P.sigmaHigh = 2.000;
     P.winsorizationCutoff = 5.000;
-    P.linearFitLow = 8.000;
-    P.linearFitHigh = 7.000;
+    P.linearFitLow = $LinearFitLow;
+    P.linearFitHigh = $LinearFitHigh;
     P.esdOutliersFraction = 0.30;
     P.esdAlpha = 0.05;
     P.ccdGain = 1.00;
