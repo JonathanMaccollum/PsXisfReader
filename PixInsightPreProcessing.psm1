@@ -667,7 +667,7 @@ Function Start-PiSubframeSelectorWeighting
         $x=$_|Format-PiPath
         "[true, ""$x""]"
     }))
-    $IntegrationDefinition = 
+    $CommandDefinition = 
     "var P = new SubframeSelector;
     P.routine = SubframeSelector.prototype.MeasureSubframes;
     P.fileCache = true;
@@ -716,7 +716,7 @@ Function Start-PiSubframeSelectorWeighting
     $executionScript = New-TemporaryFile
     $executionScript = Rename-Item ($executionScript.FullName) ($executionScript.FullName+".js") -PassThru
     try {
-        $IntegrationDefinition|Out-File -FilePath $executionScript -Force 
+        $CommandDefinition|Out-File -FilePath $executionScript -Force 
         Invoke-PICalibrationScript `
             -path $executionScript `
             -PixInsightSlot $PixInsightSlot `
@@ -833,6 +833,65 @@ P.executeGlobal();"
         Remove-Item $executionScript -Force
     }
 }
+
+Function Start-PiCometAlignment
+{
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory=$true)][int]$PixInsightSlot,
+        [Parameter(Mandatory=$true)][System.IO.FileInfo[]]$Images,
+        [Parameter(Mandatory=$true)][System.IO.DirectoryInfo]$OutputPath
+    )
+    $outputDirectory = Get-Item ($OutputPath.FullName) | Format-PiPath
+    $ImageDefinition = [string]::Join("`r`n   , ",
+    ($Images | ForEach-Object {
+        $fitsData=Get-XisfFitsStats -Path $_
+        $obsDate=$fitsData.ObsDate.Trim().Trim('''')
+        $jDate=([DateTime]$obsDate).ToOADate()+2415018.5
+        $x=$_|Format-PiPath
+        "[true, ""$x"", ""$($obsDate)"", $jDate, 0.00000000, 0.00000000, """"]"
+    }))
+    $CommandDefinition = 
+    "var P = new CometAlignment;
+    P.inputHints = `"`";
+    P.outputHints = `"`";
+    P.outputDir = `"$outputDirectory`";
+    P.outputExtension = `".xisf`";
+    P.prefix = `"`";
+    P.postfix = `"_a`";
+    P.overwrite = false;
+    P.reference = 0;
+    P.subtractFile = `"`";
+    P.subtractMode = true;
+    P.enableLinearFit = true;
+    P.rejectLow = 0.000000;
+    P.rejectHigh = 0.920000;
+    P.normalize = true;
+    P.drzSaveStarsAligned = true;
+    P.drzSaveCometAligned = true;
+    P.operandIsDI = true;
+    P.pixelInterpolation = CometAlignment.prototype.Lanczos3;
+    P.linearClampingThreshold = 0.30;
+    
+    P.targetFrames = [`r`n     $ImageDefinition`r`n   ];
+    P.launch();
+    "
+    $executionScript = New-TemporaryFile
+    $executionScript = Rename-Item ($executionScript.FullName) ($executionScript.FullName+".js") -PassThru
+    try {
+        $CommandDefinition|Out-File -FilePath $executionScript -Force 
+        Invoke-PICalibrationScript `
+            -path $executionScript `
+            -PixInsightSlot $PixInsightSlot `
+            -KeepOpen
+    }
+    finally {
+        Remove-Item $executionScript -Force
+    }
+}
+
+
+
 
 Function Invoke-PiLightIntegration
 {
