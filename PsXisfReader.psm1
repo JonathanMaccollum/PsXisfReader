@@ -74,6 +74,7 @@ Function Get-XisfFitsStats
                 ObsDateMinus12hr=([DateTime]($fits.Where{$_.Name -eq 'DATE-OBS'}.value.Trim("'"))).AddHours(-12).Date
                 LocalDate=$fits.Where{$_.Name -eq 'DATE-LOC'}.value
                 SSWeight=$fits.Where{$_.Name -eq 'SSWEIGHT'}.value
+                Pedestal=$fits.Where{$_.Name -eq 'PEDESTAL'}.value
                 Path=$Path
             }
             if($Cache)

@@ -56,7 +56,7 @@ $('L','R','G','B')|foreach-object {
     -DropoffLocation $DropoffLocation -ArchiveDirectory $ArchiveDirectory `
     -MasterDark "D:\Backups\Camera\ASI183mm-Pro\20190909\25x60s.-15C.G111.O8.masterdark.nocalibration.xisf" `
     -MasterFlat "E:\Astrophotography\1000mm\Flats\20200324.MasterFlatCal.$_.xisf" `
-    -Filter $_ -FocalLength 1000 -Exposure 60 -Gain 111 -Offset 8 -SetTemp -15 `
+    -Filter $_ -FocalLength 1000 -Exposure 60 -Gain 111 -Offset 8 -SetTemp -15 -OutputPedestal 150 `
     -OutputPath $CalibratedOutput `
     -PixInsightSlot 200
 }
