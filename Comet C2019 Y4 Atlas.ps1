@@ -1,5 +1,5 @@
 import-module $PSScriptRoot/pixinsightpreprocessing.psm1 -Force
-import-module $PSScriptRoot/PsXisfReader.psm1
+import-module $PSScriptRoot/PsXisfReader.psm1 -Force
 
 $target="E:\Astrophotography\1000mm\Comet C2019 Y4 Atlas"
 $CalibrationPath = "E:\PixInsightLT\Calibrated"
@@ -59,10 +59,24 @@ $data|group-object ObsDateMinus12hr,Filter|foreach-object {
     }    
     $subframeResults = Get-Content -Path $resultCsv
     $subframeResults | Select-Object -Skip 29|Out-File -Path $resultData -Force
-    $subframeResults | Select-Object -First 29
+    #$subframeResults | Select-Object -First 29
     $subframeData    = Import-Csv -Path "$resultData"|sort-object {[double]$_.Weight} -Descending
     $subframeData|Format-Table
 }
+
+
+$data|group-object ObsDateMinus12hr,Exposure|foreach-object {
+    $images = $_.Group
+    $exposure=$images[0].Exposure.Trim()
+    $obsDate=$images[0].ObsDateMinus12hr
+    $x=$images|foreach-object{@{UtcDate=([DateTime]$_.ObsDate).ToUniversalTime()}}|measure-object UtcDate -Minimum -Maximum
+    new-object psobject -Property @{
+        ObsDate=$obsDate.ToString('yyyyMMdd')
+        Exposures="$($images.Count.ToSTring('000'))x$($exposure)s"
+        StartingUTC=($x.Minimum.ToString('HH:mm:ss'))
+        EndingUTC=($x.Maximum.ToString('HH:mm:ss'))
+    }
+} |Sort-Object ObsDate | Format-Table ObsDate,Exposures,StartingUTC,EndingUTC
 
 
 $data|group-object ObsDateMinus12hr|foreach-object {
@@ -74,7 +88,7 @@ $data|group-object ObsDateMinus12hr|foreach-object {
         foreach-object {
             $x=$_
             $y = Get-XisfFitsStats -Path ($x.File.Replace("/","\"))
-            $w=$null
+            $r=$w=$null
             if($x.Approved -eq "true") {
                 $w = Get-Item (join-path $WeightedOutputPath ($y.Path.Name.TrimEnd(".xisf")+"_a.xisf"))
                 $r = join-path $AlignedOutputPath ($y.Path.Name.TrimEnd(".xisf")+"_a_r.xisf")
@@ -83,76 +97,118 @@ $data|group-object ObsDateMinus12hr|foreach-object {
             Add-Member -InputObject $y -Name "Weight" -MemberType NoteProperty -Value ([decimal]::Parse($x.Weight))
             Add-Member -InputObject $y -Name "Weighted" -MemberType NoteProperty -Value ($w)
             Add-Member -InputObject $y -Name "Aligned" -MemberType NoteProperty -Value ($r)
-            $y
+            if($y) {
+                $y
+            }
         }
     $referenceFrame = $all|sort-object {[double]$_.Weight} -Descending | select-object -First 1
-        
-    $toAlign = $all | where-object {-not (Test-Path $_.Aligned) -and ($_.Weighted) } | foreach-object {$_.Weighted}
-    write-host "Aligning $($toAlign.Count) for night $obsDate"
-    $x = @{
-        PixInsightSlot = 200
-        Images = $toAlign
-        ReferencePath = ($referenceFrame.Weighted)
-        OutputPath = $AlignedOutputPath
-    }    
-    Invoke-PiStarAlignment @x    
+    <#
+    $toAlign = $all | where-object {$_.Aligned -and -not (Test-Path $_.Aligned) -and ($_.Weighted) } | foreach-object {$_.Weighted}
+    if($toAlign){
+        write-host "Aligning $($toAlign.Count) for night $obsDate"
+        $x = @{
+            PixInsightSlot = 200
+            Images = $toAlign
+            ReferencePath = ($referenceFrame.Weighted)
+            OutputPath = $AlignedOutputPath
+        }    
+        Invoke-PiStarAlignment @x
+    }
+    #>
+    $aligned = $all | where-object {$_.Aligned -and (Test-Path $_.Aligned)}
+    if($aligned.Count-lt 3){
+        return;
+    }
+
+    write-host "$($obsDate.ToString('yyyyMMdd'))"
+    $aligned |
+        group-object Filter,Exposure | 
+        foreach-object {
+            $filter=$_.Values[0]
+            $exposure=$_.Values[1]
+            new-object psobject -Property @{
+                Filter=$filter
+                Exposure=$exposure
+                Exposures=$_.Group.Count
+                ExposureTime=([TimeSpan]::FromSeconds($_.Group.Count*$exposure))
+                Images=$_.Group
+            } } |
+        Sort-Object Filter |
+        Format-Table Filter,Exposures,Exposure,ExposureTime,TopWeight
+
+    $aligned |
+        group-object Filter | 
+        foreach-object {
+            $filter=$_.Values[0]
+            new-object psobject -Property @{
+                Filter=$filter
+                Images=$_.Group
+            } } |
+        ForEach-Object {
+            $filter = $_.Filter
+            $outputFileName = $_.Images[0].Object.Trim("'")
+            $outputFileName+=".$($obsDate.ToString('yyyyMMdd')).$($filter.Trim("'")).MinRejection"
+            $_.Images | group-object Exposure | foreach-object {
+                $exposure=$_.Group[0].Exposure;
+                $outputFileName+=".$($_.Group.Count)x$($exposure)s"
+            }
+            $outputFileName+=".xisf"
+            write-host $outputFileName
+            $ref = $all |
+                where-object Approved -eq "true" |
+                where-object Filter -eq $filter |
+                sort-object "Weight" -Descending | 
+                select-object -first 1
+            write-host ($ref.Aligned)
+            $toStack = $_.Images | sort-object {
+                $x = $_
+                ($x.Aligned) -ne ($ref.Aligned)
+            }
+            $outputFile = Join-Path $target $outputFileName
+            if(-not (test-path $outputFile) -and $toStack.Count -gt 3) {
+                write-host "Integrating $outputFile"
+                Invoke-PiLightIntegration `
+                    -Images ($toStack|foreach-object {$_.Aligned}) `
+                    -OutputFile $outputFile `
+                    -PixInsightSlot 200 `
+                    -Rejection "LinearFit" `
+                    -LinearFitHigh 7 `
+                    -LinearFitLow 8;
+            }
+        }
+
+    #Comet Alignment
+    $aligned |
+        group-object Filter | 
+        foreach-object {
+            $filter=$_.Values[0]
+            new-object psobject -Property @{
+                Filter=$filter
+                Images=$_.Group
+            } } |
+        ForEach-Object {
+            $filter = $_.Filter
+            $ref = $all |
+                where-object Approved -eq "true" |
+                where-object Filter -eq $filter |
+                sort-object "Weight" -Descending | 
+                select-object -first 1
+            $toAlign = $_.Images | sort-object {
+                $x = $_
+                ($x.Aligned) -ne ($ref.Aligned)
+            } | foreach-object {$_.Aligned}
+            if(-not $toAlign.Contains($referenceFrame.Aligned)){
+                $toAlign = @($referenceFrame.Aligned)+$toAlign
+            }
+            Start-PiCometAlignment `
+                -Images $toAlign `
+                -OutputPath "S:\PixInsight\CometAligned" `
+                -Verbose `
+                -PixInsightSlot 200
+        }
 }
 
 
 
-$aligned = Get-XisfFile -Path $AlignedOutputPath |
-    where-object object -like "'Comet*Y4*" 
-write-host "Aligned Stats"
-$aligned |
-    group-object Filter,Exposure | 
-    foreach-object {
-        $filter=$_.Values[0]
-        $exposure=$_.Values[1]
-        new-object psobject -Property @{
-            Filter=$filter
-            Exposure=$exposure
-            Exposures=$_.Group.Count
-            ExposureTime=([TimeSpan]::FromSeconds($_.Group.Count*$exposure))
-            Images=$_.Group
-        } } |
-    Sort-Object Filter |
-    Format-Table Filter,Exposures,Exposure,ExposureTime,TopWeight
 
-$aligned |
-    group-object Filter | 
-    foreach-object {
-        $filter=$_.Values[0]
-        new-object psobject -Property @{
-            Filter=$filter
-            Images=$_.Group
-        } } |
-    ForEach-Object {
-        $filter = $_.Filter
-        $outputFileName = $_.Images[0].Object.Trim("'")
-        $outputFileName+=".$($filter.Trim("'"))"            
-        $_.Images | group-object Exposure | foreach-object {
-            $exposure=$_.Group[0].Exposure;
-            $outputFileName+=".$($_.Group.Count)x$($exposure)s"
-        }
-        $outputFileName+=".xisf"
-        write-host $outputFileName
-        $ref = $stats |
-            where-object Approved -eq "true" |
-            where-object Filter -eq $filter |
-            sort-object "Weight" -Descending | 
-            select-object -first 1
-        write-host ($ref.Path.Name.Replace(".xisf","_a_r.xisf"))
-        $toStack = $_.Images | sort-object {
-            $x = $_
-            ($x.Path.Name) -ne ($ref.Path.Name.Replace(".xisf","_a_r.xisf"))
-        }
-        $outputFile = Join-Path $target $outputFileName
-        if(-not (test-path $outputFile)) {
-            Invoke-PiLightIntegration `
-                -Images ($toStack|foreach-object {$_.Path}) `
-                -OutputFile $outputFile `
-                -KeepOpen `
-                -PixInsightSlot 200
-        }
-    }
 
