@@ -1,7 +1,7 @@
 import-module $PSScriptRoot/pixinsightpreprocessing.psm1 -Force
 import-module $PSScriptRoot/PsXisfReader.psm1
 
-$target="E:\Astrophotography\1000mm\Coddington's Nebula"
+$target="E:\Astrophotography\135mm\NGC2403"
 $CalibrationPath = "E:\PixInsightLT\Calibrated"
 $WeightedOutputPath = "S:\PixInsight\Weighted"
 $AlignedOutputPath = "S:\PixInsight\Aligned"
@@ -21,6 +21,8 @@ $data =
         Add-Member -InputObject $x -Name "Calibrated" -MemberType NoteProperty -Value $y -Force
         $x
     }
+$cometData =    $data | where-object {[DateTime]($_.ObsDate)-gt [DateTime]("2020-04-01") }
+
 $uncalibrated = $data | where-object {-not $_.Calibrated}
 if($uncalibrated){
     $uncalibrated|foreach-object {
@@ -44,66 +46,63 @@ $data|group-object Filter,Exposure|foreach-object {
         }
 } | Sort-Object Filter|Format-Table Filter,Exposures,Exposure,ExposureTime
 
-$calibrated = $data |
+$cometData|group-object Filter,Exposure|foreach-object {
+    $filter=$_.Group[0].Filter
+    $exposure=$_.Group[0].Exposure
+        new-object psobject -Property @{
+            Filter=$filter
+            Exposure=$exposure
+            Exposures=$_.Group.Count
+            ExposureTime=([TimeSpan]::FromSeconds($_.Group.Count*$exposure))
+            Images=$_.Group
+        }
+} | Sort-Object Filter|Format-Table Filter,Exposures,Exposure,ExposureTime
+
+$calibrated = $cometData |
     where-object { $uncalibrated -notcontains $_ } |
-    where-object Filter -ne "Ha" |
-    group-object Filter |
+    group-object Filter,Exposure |
     foreach-object {
         $images = $_.Group
         $filter=$images[0].Filter.Trim()
+        $exposure=$images[0].Exposure.Trim()
         $toWeigh = $_.Group.Calibrated
 
-        $resultCsv="$target\Subframe.$filter.csv"
-        $resultData="$target\Subframe.$filter.Data.csv"
+        $resultCsv="$target\Subframe.$filter.$exposure.csv"
+        $resultData="$target\Subframe.$filter.$exposure.Data.csv"
         if(-not (test-path $resultCsv)) {
-            set-clipboard -Value $resultCsv
-            write-host "Starting Subframe Selector... Save the resulting output CSV file to $resultCsv before exiting. (Path copied to clipboard.)"
             Start-PiSubframeSelectorWeighting `
             -PixInsightSlot 200 `
             -OutputPath $WeightedOutputPath `
             -Images $toWeigh `
-            -WeightingExpression "(5*(1-(FWHM-FWHMMin)/(FWHMMax-FWHMMin))
-            + 15*(1-(Eccentricity-EccentricityMin)/(EccentricityMax-EccentricityMin))
+            -ApprovalExpression "Median<203 && FWHM<0.6"
+            -WeightingExpression "(15*(1-(FWHM-FWHMMin)/(FWHMMax-FWHMMin))
+            + 05*(1-(Eccentricity-EccentricityMin)/(EccentricityMax-EccentricityMin))
             + 15*(SNRWeight-SNRWeightMin)/(SNRWeightMax-SNRWeightMin)
+            + 30*(1-(Median-MedianMin)/(MedianMax-MedianMin))
             + 20*(Stars-StarsMin)/(StarsMax-StarsMin))
-            + 30" `
-            -ApprovalExpression ""
+            + 20"
         }
         
         $subframeResults = Get-Content -Path $resultCsv
-        $indexOfCSV=0
-        $csvFound=$false
-        $subframeResults | foreach-object {
-            if($_.StartsWith("Index,Approved,Locked")){                
-                $csvFound=$true;
-            }
-            if(-not $csvFound){
-                $indexOfCSV+=1;
-            }            
-        }
-        $subframeResults | Select-Object -Skip $indexOfCSV|Out-File -Path $resultData -Force
-        $subframeResults | Select-Object -First $indexOfCSV
+        $subframeResults | Select-Object -Skip 29|Out-File -Path $resultData -Force
+        $subframeResults | Select-Object -First 29
         $subframeData    = Import-Csv -Path "$resultData"|sort-object {[double]$_.Weight} -Descending
         $subframeData|FT
     }
 
-$stats = get-childitem $target *.data.csv |
+$stats = get-childitem $target *60.data.csv |
         import-csv |
         foreach-object {
             $x=$_
             $y = Get-XisfFitsStats -Path ($x.File.Replace("/","\"))
-            $r=$w=$null
+            $w=$null
             if($x.Approved -eq "true") {
                 $w = Get-Item (join-path $WeightedOutputPath ($y.Path.Name.TrimEnd(".xisf")+"_a.xisf"))
-                $r = join-path $AlignedOutputPath ($y.Path.Name.TrimEnd(".xisf")+"_a_r.xisf")
             }
             Add-Member -InputObject $y -Name "Approved" -MemberType NoteProperty -Value ([bool]::Parse($x.Approved))
             Add-Member -InputObject $y -Name "Weight" -MemberType NoteProperty -Value ([decimal]::Parse($x.Weight))
             Add-Member -InputObject $y -Name "Weighted" -MemberType NoteProperty -Value ($w)
-            Add-Member -InputObject $y -Name "Aligned" -MemberType NoteProperty -Value ($r)
-            if($y) {
-                $y
-            }
+            $y
         }
 $summary = $stats |
     group-object Approved,Filter,Exposure |
@@ -132,21 +131,27 @@ write-host "Approved:"
 [TimeSpan]::FromSeconds((
         $summary|where-Object Approved -eq $true|foreach-object {$_.ExposureTime.TotalSeconds} |Measure-Object  -Sum).Sum).ToString()
 
-$referenceFrame = $stats | where-object Approved -eq "true" | where-object Filter -eq "'L'" | sort-object "Weight" -Descending | select-object -first 1
-$stats | where-object Approved -eq "true" | group-object Filter | foreach-object {
-    $filter = $_.Group[0].Filter
+#$referenceFrame = $stats | where-object Approved -eq "true" | sort-object "Weight" -Descending | select-object -first 1
+$referenceFrame = $stats | where-object Approved -eq "true" | where-object Filter -eq "'L3'" | sort-object "Weight" -Descending | select-object -first 1
 
-    $toAlign = $_.Group | where-object {$_.Aligned -and -not (Test-Path $_.Aligned) -and ($_.Weighted) } | foreach-object {$_.Weighted}
-    if($toAlign){
-        write-host "Aligning $($toAlign.Count) for filter $filter"
-        Invoke-PiStarAlignment `
-            -PixInsightSlot 200 `
-            -Images $toAlign `
-            -ReferencePath ($referenceFrame.Weighted) `
-            -OutputPath $AlignedOutputPath
-    }
+<#
+$stats | where-object Approved -eq "true" | group-object Filter | foreach-object {
+$filter = $_.Group[0].Filter
+
+write-host "Aligning $($_.Group.Count) for filter $filter"
+$images = $_.Group | foreach-object {$_.Weighted}
+Invoke-PiStarAlignment `
+    -PixInsightSlot 200 `
+    -Images $images `
+    -ReferencePath "E:\Astrophotography\135mm\NGC2403\NGC2403.071mc.135mm.180x2min.integrated.xisf" `
+    -OutputPath $AlignedOutputPath `
+    -KeepOpen
 }
-$aligned = $stats | where-object {$_.Aligned -and (Test-Path $_.Aligned) }
+#>
+
+
+$aligned = Get-XisfFile -Path $AlignedOutputPath |
+    where-object object -eq "'M109'" 
 write-host "Aligned Stats"
 $aligned |
     group-object Filter,Exposure | 
@@ -174,32 +179,30 @@ $aligned |
     ForEach-Object {
         $filter = $_.Filter
         $outputFileName = $_.Images[0].Object.Trim("'")
-        $outputFileName+=".$($filter.Trim("'"))"
+        $outputFileName+=".$($filter.Trim("'"))"            
         $_.Images | group-object Exposure | foreach-object {
             $exposure=$_.Group[0].Exposure;
             $outputFileName+=".$($_.Group.Count)x$($exposure)s"
         }
         $outputFileName+=".xisf"
         write-host $outputFileName
-        $ref = $aligned |
+        $ref = $stats |
             where-object Approved -eq "true" |
             where-object Filter -eq $filter |
             sort-object "Weight" -Descending | 
             select-object -first 1
-        write-host ($ref.Aligned)
+        write-host ($ref.Path.Name.Replace(".xisf","_a_r.xisf"))
         $toStack = $_.Images | sort-object {
             $x = $_
-            ($x.Aligned) -eq ($ref.Aligned)
+            ($x.Path.Name) -ne ($ref.Path.Name.Replace(".xisf","_a_r.xisf"))
         }
         $outputFile = Join-Path $target $outputFileName
-        if(-not (test-path $outputFile) -and $toStack.Count -gt 3) {
-            write-host "Integrating $outputFile"
+        if(-not (test-path $outputFile)) {
             Invoke-PiLightIntegration `
-                -Images ($toStack|foreach-object {$_.Aligned}) `
+                -Images ($toStack|foreach-object {$_.Path}) `
                 -OutputFile $outputFile `
-                -PixInsightSlot 200 `
-                -Rejection "LinearFit" `
-                -LinearFitHigh 7 `
-                -LinearFitLow 8;
+                -KeepOpen `
+                -PixInsightSlot 200
         }
     }
+

@@ -5,7 +5,10 @@ $target="E:\Astrophotography\1000mm\Comet C2019 Y4 Atlas"
 $CalibrationPath = "E:\PixInsightLT\Calibrated"
 $WeightedOutputPath = "S:\PixInsight\Weighted"
 $AlignedOutputPath = "S:\PixInsight\Aligned"
+$CometAlignedOutputPath = "S:\PixInsight\CometAligned"
 $BackupCalibrationPaths = @("T:\PixInsightLT\Calibrated")
+
+
 
 $data = 
     Get-XisfLightFrames -Path $target -Recurse |
@@ -92,11 +95,13 @@ $data|group-object ObsDateMinus12hr|foreach-object {
             if($x.Approved -eq "true") {
                 $w = Get-Item (join-path $WeightedOutputPath ($y.Path.Name.TrimEnd(".xisf")+"_a.xisf"))
                 $r = join-path $AlignedOutputPath ($y.Path.Name.TrimEnd(".xisf")+"_a_r.xisf")
+                $ca = join-path $CometAlignedOutputPath ($y.Path.Name.TrimEnd(".xisf")+"_a_r_a.xisf")
             }
             Add-Member -InputObject $y -Name "Approved" -MemberType NoteProperty -Value ([bool]::Parse($x.Approved))
             Add-Member -InputObject $y -Name "Weight" -MemberType NoteProperty -Value ([decimal]::Parse($x.Weight))
             Add-Member -InputObject $y -Name "Weighted" -MemberType NoteProperty -Value ($w)
             Add-Member -InputObject $y -Name "Aligned" -MemberType NoteProperty -Value ($r)
+            Add-Member -InputObject $y -Name "CometAligned" -MemberType NoteProperty -Value ($ca)
             if($y) {
                 $y
             }
@@ -147,7 +152,7 @@ $data|group-object ObsDateMinus12hr|foreach-object {
         ForEach-Object {
             $filter = $_.Filter
             $outputFileName = $_.Images[0].Object.Trim("'")
-            $outputFileName+=".$($obsDate.ToString('yyyyMMdd')).$($filter.Trim("'")).MinRejection"
+            $outputFileName+=".$($obsDate.ToString('yyyyMMdd')).$($filter.Trim("'"))"
             $_.Images | group-object Exposure | foreach-object {
                 $exposure=$_.Group[0].Exposure;
                 $outputFileName+=".$($_.Group.Count)x$($exposure)s"
@@ -171,11 +176,13 @@ $data|group-object ObsDateMinus12hr|foreach-object {
                     -Images ($toStack|foreach-object {$_.Aligned}) `
                     -OutputFile $outputFile `
                     -PixInsightSlot 200 `
-                    -Rejection "LinearFit" `
+                    -Rejection "PercentileClip" `
                     -LinearFitHigh 7 `
                     -LinearFitLow 8;
             }
         }
+
+<#
 
     #Comet Alignment
     $aligned |
@@ -202,10 +209,57 @@ $data|group-object ObsDateMinus12hr|foreach-object {
             }
             Start-PiCometAlignment `
                 -Images $toAlign `
-                -OutputPath "S:\PixInsight\CometAligned" `
+                -OutputPath $CometAlignedOutputPath `
                 -Verbose `
                 -PixInsightSlot 200
         }
+        #>
+
+    $cometAligned = $all | where-object {$_.CometAligned -and (Test-Path $_.CometAligned)}
+    if($cometAligned.Count-lt 3){
+        return;
+    }
+
+
+    $cometAligned |
+        group-object Filter | 
+        foreach-object {
+            $filter=$_.Values[0]
+            new-object psobject -Property @{
+                Filter=$filter
+                Images=$_.Group
+            } } |
+        ForEach-Object {
+            $filter = $_.Filter
+            $outputFileName = $_.Images[0].Object.Trim("'")
+            $outputFileName+=".$($obsDate.ToString('yyyyMMdd')).$($filter.Trim("'")).CometAligned.PC"
+            $_.Images | group-object Exposure | foreach-object {
+                $exposure=$_.Group[0].Exposure;
+                $outputFileName+=".$($_.Group.Count)x$($exposure)s"
+            }
+            $outputFileName+=".xisf"
+            write-host $outputFileName
+            $ref = $all |
+                where-object Approved -eq "true" |
+                where-object Filter -eq $filter |
+                sort-object "Weight" -Descending | 
+                select-object -first 1
+            write-host ($ref.CometAligned)
+            $toStack = $_.Images | sort-object {
+                $x = $_
+                ($x.CometAligned) -ne ($ref.CometAligned)
+            }
+            $outputFile = Join-Path $target $outputFileName
+            if(-not (test-path $outputFile) -and $toStack.Count -gt 3) {
+                write-host "Integrating $outputFile"
+                Invoke-PiLightIntegration `
+                    -Images ($toStack|foreach-object {$_.CometAligned}) `
+                    -OutputFile $outputFile `
+                    -PixInsightSlot 200 `
+                    -Rejection "PercentileClip"
+            }
+        }
+    
 }
 
 

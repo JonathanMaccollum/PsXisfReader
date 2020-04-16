@@ -1,7 +1,7 @@
 import-module $PSScriptRoot/pixinsightpreprocessing.psm1 -Force
 import-module $PSScriptRoot/PsXisfReader.psm1
 
-$target="E:\Astrophotography\1000mm\Coddington's Nebula"
+$target="E:\Astrophotography\1000mm\M51"
 $CalibrationPath = "E:\PixInsightLT\Calibrated"
 $WeightedOutputPath = "S:\PixInsight\Weighted"
 $AlignedOutputPath = "S:\PixInsight\Aligned"
@@ -46,7 +46,6 @@ $data|group-object Filter,Exposure|foreach-object {
 
 $calibrated = $data |
     where-object { $uncalibrated -notcontains $_ } |
-    where-object Filter -ne "Ha" |
     group-object Filter |
     foreach-object {
         $images = $_.Group
@@ -67,7 +66,7 @@ $calibrated = $data |
             + 15*(SNRWeight-SNRWeightMin)/(SNRWeightMax-SNRWeightMin)
             + 20*(Stars-StarsMin)/(StarsMax-StarsMin))
             + 30" `
-            -ApprovalExpression ""
+            -ApprovalExpression "FWHM<4.5 && Eccentricity<0.65"
         }
         
         $subframeResults = Get-Content -Path $resultCsv

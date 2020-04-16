@@ -1,7 +1,7 @@
 import-module $PSScriptRoot/pixinsightpreprocessing.psm1 -Force
 import-module $PSScriptRoot/PsXisfReader.psm1
 
-$target="E:\Astrophotography\1000mm\Coddington's Nebula"
+$target="E:\Astrophotography\1000mm\M82"
 $CalibrationPath = "E:\PixInsightLT\Calibrated"
 $WeightedOutputPath = "S:\PixInsight\Weighted"
 $AlignedOutputPath = "S:\PixInsight\Aligned"
@@ -132,7 +132,7 @@ write-host "Approved:"
 [TimeSpan]::FromSeconds((
         $summary|where-Object Approved -eq $true|foreach-object {$_.ExposureTime.TotalSeconds} |Measure-Object  -Sum).Sum).ToString()
 
-$referenceFrame = $stats | where-object Approved -eq "true" | where-object Filter -eq "'L'" | sort-object "Weight" -Descending | select-object -first 1
+$referenceFrame = $stats | where-object Approved -eq "true" | where-object Filter -eq "'Ha'" | sort-object "Weight" -Descending | select-object -first 1
 $stats | where-object Approved -eq "true" | group-object Filter | foreach-object {
     $filter = $_.Group[0].Filter
 
