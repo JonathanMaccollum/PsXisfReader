@@ -23,6 +23,9 @@ if($null -eq $cache){
     }
 }
 
+
+# caching all stats in a directory structure
+
 $data = @()
 $data += Get-ChildItem "E:\Astrophotography" *.xisf -Recurse
 $withStats=$data |
@@ -35,6 +38,10 @@ $withStats=$data |
     foreach-object { 
         Get-XisfFitsStats -Path $_ -Cache $cache         
     }
+$cache|Export-Clixml -Path $PathToCache -Force
+
+
+# acquisition stats by month
 $withStats|
     where-object ImageType -eq 'LIGHT' |
     where-object ImageType -NE $null |
@@ -49,4 +56,19 @@ $withStats|
         "$($_.Name) - $([TimeSpan]::FromSeconds($sum.Sum).TotalHours.ToString("0.00"))hrs"
     }
 
-$cache|Export-Clixml -Path $PathToCache -Force
+# by target
+$withStats|
+    where-object ImageType -eq 'LIGHT' |
+    where-object ImageType -NE $null |
+    Group-Object Object |
+    foreach-object  {
+        $sum=($_.Group|measure-object Exposure -Sum)
+        new-object psobject -Property @{
+            ExposureTimeSeconds = ($sum.Sum)
+            Object = $_.Name
+        }
+    } | 
+    sort-object ExposureTimeSeconds -Descending |
+    foreach-object {
+        "$($_.Object) - $([TimeSpan]::FromSeconds($_.ExposureTimeSeconds).TotalHours.ToString("0.00"))hrs"
+    }
