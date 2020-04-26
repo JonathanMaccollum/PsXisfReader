@@ -476,7 +476,7 @@ Function Get-XisfFile{
         [Switch]$Recurse
     )
     Get-ChildItem -Path $Path -File -Filter *.xisf -Recurse:$Recurse |
-        Get-XisfFitsStats -Path $_
+        Get-XisfFitsStats
     
 }
 
