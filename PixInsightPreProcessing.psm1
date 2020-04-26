@@ -487,7 +487,7 @@ Function Get-XisfLightFrames{
         [Parameter()][Switch]$Recurse
     )
     Get-ChildItem -Path $Path -File -Filter *.xisf -Recurse:$Recurse |
-        Get-XisfFitsStats -Path $_ |
+        Get-XisfFitsStats |
         where-object ImageType -eq "LIGHT"
 }
 Function Invoke-FlatFrameSorting
