@@ -46,7 +46,6 @@ $data|group-object Filter,Exposure|foreach-object {
 
 $calibrated = $data |
     where-object { $uncalibrated -notcontains $_ } |
-    where-object Filter -ne "Ha" |
     group-object Filter |
     foreach-object {
         $images = $_.Group
@@ -67,7 +66,7 @@ $calibrated = $data |
             + 15*(SNRWeight-SNRWeightMin)/(SNRWeightMax-SNRWeightMin)
             + 20*(Stars-StarsMin)/(StarsMax-StarsMin))
             + 30" `
-            -ApprovalExpression ""
+            -ApprovalExpression "FWHM<4.5 && Eccentricity<0.65"
         }
         
         $subframeResults = Get-Content -Path $resultCsv
@@ -128,11 +127,25 @@ $summary |
 write-host "Rejected:"
 [TimeSpan]::FromSeconds((
     $summary|where-Object Approved -eq $false | foreach-object {$_.ExposureTime.TotalSeconds} |Measure-Object  -Sum).Sum).ToString()
-write-host "Approved:"
+write-host "Approved Total:"
 [TimeSpan]::FromSeconds((
         $summary|where-Object Approved -eq $true|foreach-object {$_.ExposureTime.TotalSeconds} |Measure-Object  -Sum).Sum).ToString()
+Write-Host
+write-host "Approved L:"
+[TimeSpan]::FromSeconds((
+        $summary|where-Object Approved -eq $true | where-object Filter -eq "'L'"|foreach-object {$_.ExposureTime.TotalSeconds} |Measure-Object  -Sum).Sum).ToString()
+write-host "Approved R:"
+[TimeSpan]::FromSeconds((
+        $summary|where-Object Approved -eq $true | where-object Filter -eq "'R'"|foreach-object {$_.ExposureTime.TotalSeconds} |Measure-Object  -Sum).Sum).ToString()
+write-host "Approved G:"
+[TimeSpan]::FromSeconds((
+        $summary|where-Object Approved -eq $true | where-object Filter -eq "'G'"|foreach-object {$_.ExposureTime.TotalSeconds} |Measure-Object  -Sum).Sum).ToString()
+write-host "Approved B:"
+[TimeSpan]::FromSeconds((
+        $summary|where-Object Approved -eq $true | where-object Filter -eq "'B'"|foreach-object {$_.ExposureTime.TotalSeconds} |Measure-Object  -Sum).Sum).ToString()
+        
 
-$referenceFrame = $stats | where-object Approved -eq "true" | where-object Filter -eq "'Ha'" | sort-object "Weight" -Descending | select-object -first 1
+$referenceFrame = $stats | where-object Approved -eq "true" | where-object Filter -eq "'L'" | sort-object "Weight" -Descending | select-object -first 1
 $stats | where-object Approved -eq "true" | group-object Filter | foreach-object {
     $filter = $_.Group[0].Filter
 
@@ -144,6 +157,28 @@ $stats | where-object Approved -eq "true" | group-object Filter | foreach-object
             -Images $toAlign `
             -ReferencePath ($referenceFrame.Weighted) `
             -OutputPath $AlignedOutputPath
+
+        $failedAlignemnt = $_.Group | where-object {$_.Aligned -and -not (Test-Path $_.Aligned) -and ($_.Weighted) } | foreach-object {$_.Weighted}
+        if($failedAlignemnt){
+            Write-Warning "$($failedAlignemnt.Count) $filter subs failed to align... increasing detection scales to 6"
+            Invoke-PiStarAlignment `
+                -PixInsightSlot 200 `
+                -Images $failedAlignemnt `
+                -ReferencePath ($referenceFrame.Weighted) `
+                -OutputPath $AlignedOutputPath `
+                -DetectionScales 6
+        }
+        $failedAlignemnt = $_.Group | where-object {$_.Aligned -and -not (Test-Path $_.Aligned) -and ($_.Weighted) } | foreach-object {$_.Weighted}
+        if($failedAlignemnt){
+            Write-Warning "$($failedAlignemnt.Count) $filter subs failed to align... increasing detection scales to 7"
+            Invoke-PiStarAlignment `
+                -PixInsightSlot 200 `
+                -Images $failedAlignemnt `
+                -ReferencePath ($referenceFrame.Weighted) `
+                -OutputPath $AlignedOutputPath `
+                -DetectionScales 7 `
+                -KeepOpen
+        }
     }
 }
 $aligned = $stats | where-object {$_.Aligned -and (Test-Path $_.Aligned) }
@@ -203,3 +238,18 @@ $aligned |
                 -LinearFitLow 8;
         }
     }
+
+$outputFile = Join-Path $target "SuperLum.xisf"
+if(-not (test-path $outputFile) ) {
+    write-host "Integrating $outputFile"
+    Invoke-PiLightIntegration `
+        -Images ($aligned | sort-object {
+            $x = $_
+            ($x.Aligned) -ne ($referenceFrame.Aligned)
+        }|foreach-object {$_.Aligned}) `
+        -OutputFile $outputFile `
+        -PixInsightSlot 200 `
+        -Rejection "LinearFit" `
+        -LinearFitHigh 7 `
+        -LinearFitLow 8 -KeepOpen
+}

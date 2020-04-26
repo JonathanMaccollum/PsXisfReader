@@ -1,7 +1,7 @@
 import-module $PSScriptRoot/pixinsightpreprocessing.psm1 -Force
 import-module $PSScriptRoot/PsXisfReader.psm1
 
-$target="E:\Astrophotography\1000mm\M51"
+$target="E:\Astrophotography\1000mm\M81"
 $CalibrationPath = "E:\PixInsightLT\Calibrated"
 $WeightedOutputPath = "S:\PixInsight\Weighted"
 $AlignedOutputPath = "S:\PixInsight\Aligned"

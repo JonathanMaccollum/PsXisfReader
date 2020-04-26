@@ -157,6 +157,28 @@ $stats | where-object Approved -eq "true" | group-object Filter | foreach-object
             -Images $toAlign `
             -ReferencePath ($referenceFrame.Weighted) `
             -OutputPath $AlignedOutputPath
+
+        $failedAlignemnt = $_.Group | where-object {$_.Aligned -and -not (Test-Path $_.Aligned) -and ($_.Weighted) } | foreach-object {$_.Weighted}
+        if($failedAlignemnt){
+            Write-Warning "$($failedAlignemnt.Count) $filter subs failed to align... increasing detection scales to 6"
+            Invoke-PiStarAlignment `
+                -PixInsightSlot 200 `
+                -Images $failedAlignemnt `
+                -ReferencePath ($referenceFrame.Weighted) `
+                -OutputPath $AlignedOutputPath `
+                -DetectionScales 6
+        }
+        $failedAlignemnt = $_.Group | where-object {$_.Aligned -and -not (Test-Path $_.Aligned) -and ($_.Weighted) } | foreach-object {$_.Weighted}
+        if($failedAlignemnt){
+            Write-Warning "$($failedAlignemnt.Count) $filter subs failed to align... increasing detection scales to 7"
+            Invoke-PiStarAlignment `
+                -PixInsightSlot 200 `
+                -Images $failedAlignemnt `
+                -ReferencePath ($referenceFrame.Weighted) `
+                -OutputPath $AlignedOutputPath `
+                -DetectionScales 7 `
+                -KeepOpen
+        }
     }
 }
 $aligned = $stats | where-object {$_.Aligned -and (Test-Path $_.Aligned) }
@@ -216,3 +238,18 @@ $aligned |
                 -LinearFitLow 8;
         }
     }
+
+$outputFile = Join-Path $target "SuperLum.xisf"
+if(-not (test-path $outputFile) ) {
+    write-host "Integrating $outputFile"
+    Invoke-PiLightIntegration `
+        -Images ($aligned | sort-object {
+            $x = $_
+            ($x.Aligned) -ne ($referenceFrame.Aligned)
+        }|foreach-object {$_.Aligned}) `
+        -OutputFile $outputFile `
+        -PixInsightSlot 200 `
+        -Rejection "LinearFit" `
+        -LinearFitHigh 7 `
+        -LinearFitLow 8 -KeepOpen
+}

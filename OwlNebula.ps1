@@ -128,7 +128,7 @@ $stats | where-object Approved -eq "true" | where-object Filter -ne "'Sii'" |gro
     Invoke-PiStarAlignment `
         -PixInsightSlot 200 `
         -Images $images `
-        -ReferencePath ($referenceFrame.Weighted) `
+        -ReferencePath "E:\Astrophotography\1000mm\Owl Nebula\Owl Nebula.Ha.106x240s.xisf" `
         -OutputPath $AlignedOutputPath `
         -KeepOpen
 }
