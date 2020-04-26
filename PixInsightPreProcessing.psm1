@@ -50,12 +50,12 @@ Function Invoke-PixInsightScript
         while(-not (Get-PixInsightInstance -PixInsightSlot $PixInsightSlot))
         {
             Write-Verbose "Waiting for PixInsight to start slot $PixInsightSlot"
-            Wait-Event -Timeout 1            
+            Wait-Event -Timeout 4            
         }
         Write-Verbose "Waiting for completion of slot $PixInsightSlot"
         Wait-PixInsightInstance -PixInsightSlot $PixInsightSlot >> $null
+        Wait-Event -Timeout 4
         Write-Verbose "PixInsight slot $PixInsightSlot completed."
-        Wait-Event -Timeout 2
     }
     finally
     {
@@ -69,13 +69,15 @@ Function Format-PiPath
         [Parameter(Mandatory=$true,ValueFromPipeline=$true,ParameterSetName="File")][System.IO.FileInfo]$Path,
         [Parameter(Mandatory=$true,ValueFromPipeline=$true,ParameterSetName="Directory")][System.IO.DirectoryInfo]$Directory
     )
-    if($Path) {
-        $Path.FullName.Replace('\','/')
-    }
-    else{
-        $Directory.FullName.Replace('\','/')
-    }
+    process{
+        if($Path) {
+            $Path.FullName.Replace('\','/')
+        }
+        else{
+            $Directory.FullName.Replace('\','/')
+        }
     
+    }    
 }
 Function Invoke-PIIntegrationScript
 {
@@ -404,18 +406,20 @@ Function Invoke-DarkFrameSorting
     Get-ChildItem $DropoffLocation "*.xisf" |
     foreach-object { Get-XisfFitsStats -Path $_ } |
     where-object ImageType -eq "DARK" |
-    group-object Instrument,Exposure,SetTemp |
+    group-object Instrument,Exposure,SetTemp,Gain,Offset |
     foreach-object {
         $images=$_.Group
         $instrument=$images[0].Instrument.Trim().Trim("'")
         $exposure=$images[0].Exposure.Trim()
         $setTemp=($images[0].SetTemp)
+        $gain=($images[0].Gain)
+        $offset=($images[0].Offset)
         $date = ([DateTime]$images[0].LocalDate).Date.ToString('yyyyMMdd')
         $targetDirectory = "$ArchiveDirectory\DarkLibrary\$instrument"
         [System.IO.Directory]::CreateDirectory($targetDirectory)>>$null
-        $masterDark = "$targetDirectory\$($date).MasterDark.$($setTemp)C.$($images.Count)x$($exposure)s.xisf"
+        $masterDark = "$targetDirectory\$($date).MasterDark.Gain.$($gain).Offset.$($offset).$($setTemp)C.$($images.Count)x$($exposure)s.xisf"
         if(-not (Test-Path $masterDark)) {
-            Write-Host "Integrating $($images.Count) Darks for $instrument at $setTemp duration $($exposure)s"
+            Write-Host "Integrating $($images.Count) Darks for $instrument Gain $gain Offset $offset at $setTemp duration $($exposure)s"
             $darkFlats = $images | foreach-object {$_.Path}
             Invoke-PiDarkIntegration `
                 -Images $darkFlats `
@@ -472,20 +476,19 @@ Function Get-XisfFile{
         [Switch]$Recurse
     )
     Get-ChildItem -Path $Path -File -Filter *.xisf -Recurse:$Recurse |
-        foreach-object {
-            Get-XisfFitsStats -Path $_
-        }
+        Get-XisfFitsStats -Path $_
     
 }
 
 Function Get-XisfLightFrames{
     [CmdletBinding()]
     param (
-        [System.IO.DirectoryInfo]$Path,
-        [Switch]$Recurse
+        [Parameter(Mandatory)][System.IO.DirectoryInfo]$Path,
+        [Parameter()][Switch]$Recurse
     )
-    Get-XisfFile -Path:$Path -Recurse:$Recurse |
-        where-object ImageType -eq LIGHT
+    Get-ChildItem -Path $Path -File -Filter *.xisf -Recurse:$Recurse |
+        Get-XisfFitsStats -Path $_ |
+        where-object ImageType -eq "LIGHT"
 }
 Function Invoke-FlatFrameSorting
 {
@@ -574,15 +577,16 @@ Function Invoke-LightFrameSorting
 {
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory)][System.IO.DirectoryInfo]$DropoffLocation,
+        [Parameter(Mandatory,ParameterSetName="ByDirectory")][System.IO.DirectoryInfo]$DropoffLocation,
+        [Parameter(Mandatory,ParameterSetName="ByFiles")][Object[]]$XisfStats,
         [Parameter(Mandatory)][System.IO.DirectoryInfo]$ArchiveDirectory,
 
-        [Parameter(Mandatory)][String]$Filter,
-        [Parameter(Mandatory)][int]$FocalLength,
-        [Parameter(Mandatory)][int]$Exposure,
-        [Parameter(Mandatory)][int]$Gain,
-        [Parameter(Mandatory)][int]$Offset,
-        [Parameter(Mandatory)][int]$SetTemp,
+        [Parameter(Mandatory,ParameterSetName="ByDirectory")][String]$Filter,
+        [Parameter(Mandatory,ParameterSetName="ByDirectory")][int]$FocalLength,
+        [Parameter(Mandatory,ParameterSetName="ByDirectory")][int]$Exposure,
+        [Parameter(Mandatory,ParameterSetName="ByDirectory")][int]$Gain,
+        [Parameter(Mandatory,ParameterSetName="ByDirectory")][int]$Offset,
+        [Parameter(Mandatory,ParameterSetName="ByDirectory")][int]$SetTemp,
 
         [Parameter(Mandatory)][System.IO.FileInfo]$MasterDark,
         [Parameter(Mandatory)][System.IO.FileInfo]$MasterFlat,
@@ -590,18 +594,30 @@ Function Invoke-LightFrameSorting
 
         [Parameter(Mandatory)][int]$PixInsightSlot,
         [System.IO.DirectoryInfo[]]$AdditionalSearchPaths,
-        [Parameter()][int]$OutputPedestal = 0
+        [Parameter(Mandatory=$false)][int]$OutputPedestal = 0,
+        [Parameter(Mandatory=$false)][Switch]$KeepOpen
     )
-
-    Get-ChildItem $DropoffLocation "*.xisf" |
-    foreach-object { Get-XisfFitsStats -Path $_ } |
-    where-object ImageType -eq "Light" |
-    where-object SetTemp -eq $SetTemp |
-    where-object Filter -eq $Filter |
-    where-object Exposure -eq $Exposure |
-    where-object CCDGain -eq $CCDGain |
-    where-object Offset -eq $Offset |
-    where-object FocalLength -eq $FocalLength |
+    if($XisfStats -eq $null)
+    {
+        $XisfStats = Get-ChildItem $DropoffLocation "*.xisf" -File |
+            Get-XisfFitsStats |
+            where-object ImageType -eq "Light" |
+            where-object SetTemp -eq $SetTemp |
+            where-object Filter -eq $Filter |
+            where-object Exposure -eq $Exposure |
+            where-object CCDGain -eq $CCDGain |
+            where-object Offset -eq $Offset |
+            where-object FocalLength -eq $FocalLength
+    }
+    else{
+        $Filter=$XisfStats[0].Filter
+        $FocalLength=$XisfStats[0].FocalLength
+        $Exposure=$XisfStats[0].Exposure
+        $Gain=$XisfStats[0].Gain
+        $Offset=$XisfStats[0].Offset
+        $SetTemp=$XisfStats[0].SetTemp
+    }
+    $XisfStats |
     Group-Object Object |
     foreach-object {
         $object = $_.Name
@@ -622,7 +638,8 @@ Function Invoke-LightFrameSorting
                 -MasterFlat $MasterFlat `
                 -OutputPath $OutputPath `
                 -OutputPedestal $OutputPedestal `
-                -PixInsightSlot $PixInsightSlot
+                -PixInsightSlot $PixInsightSlot `
+                -KeepOpen:$KeepOpen
         }
 
         $archive = Join-Path $ArchiveDirectory "$($FocalLength)mm" 
@@ -735,7 +752,8 @@ Function Invoke-PiStarAlignment
         [Parameter(Mandatory=$true)][System.IO.FileInfo[]]$Images,
         [Parameter(Mandatory=$true)][System.IO.FileInfo]$ReferencePath,
         [Parameter(Mandatory=$true)][System.IO.DirectoryInfo]$OutputPath,
-        [Parameter(Mandatory=$false)][Switch]$KeepOpen
+        [Parameter(Mandatory=$false)][Switch]$KeepOpen,
+        [Parameter(Mandatory=$false)][int]$DetectionScales=5
     )
     $piReferencePath = Get-Item $ReferencePath | Format-PiPath
     $outputDirectory = Get-Item ($OutputPath.FullName) | Format-PiPath
@@ -747,7 +765,7 @@ Function Invoke-PiStarAlignment
     $CommandDefinition = 
     "
 var P = new StarAlignment;
-P.structureLayers = 5;
+P.structureLayers = $DetectionScales;
 P.noiseLayers = 0;
 P.hotPixelFilterRadius = 1;
 P.noiseReductionFilterRadius = 0;
