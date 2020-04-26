@@ -22,12 +22,119 @@ Invoke-FlatFrameSorting `
     -PixInsightSlot 200
 
 
+
+
+$DarkLibraryFiles =
+    Get-ChildItem "E:\Astrophotography\DarkLibrary\ZWO ASI183MM Pro" "*MasterDark.Gain*.Offset.*.*C*x*s.xisf" -File |
+    Get-XisfFitsStats |
+    % {
+        # note: expecting file names with the pattern: "*MasterDark.Gain.___.Offset.___.-15C.__x__s.xisf"
+        $x=$_
+        $parts=$x.Path.Name.Split(".")
+
+        $gain=$parts[$parts.IndexOf("Gain")+1]
+        $offset=$parts[$parts.IndexOf("Offset")+1]
+        $temp=$parts[$parts.IndexOf("Offset")+2]
+        $exposure=$parts[$parts.IndexOf("Offset")+3]
+        if(-not $x.SetTemp){
+            $x.SetTemp=[decimal]$temp.TrimEnd("C")
+        }
+        if(-not $x.Gain) {
+            $x.Gain=[decimal]$gain
+        }
+        if(-not $x.Offset){
+            $x.Offset=[decimal]$offset
+        }
+        if(-not $x.Exposure){
+            $x.Exposure=[decimal]$exposure.Split('x')[1].TrimEnd("s")
+        }
+        $x
+    }
+
+$DarkLibrary=($DarkLibraryFiles|group-object Instrument,Gain,Offset,Exposure,SetTemp|foreach-object {
+    $instrument=$_.Group[0].Instrument
+    $gain=$_.Group[0].Gain
+    $offset=$_.Group[0].Offset
+    $exposure=$_.Group[0].Exposure
+    $setTemp=$_.Group[0].SetTemp
+    
+    $dark=$_.Group | sort-object {(Get-Item $_.Path).LastModifiedDate} -Descending | select-object -First 1
+    new-object psobject -Property @{
+        Instrument=$instrument
+        Gain=$gain
+        Offset=$offset
+        Exposure=$exposure
+        SetTemp=$setTemp
+        Path=$dark.Path
+    }
+})
+
+Get-ChildItem $DropoffLocation *.xisf |
+    Get-XisfFitsStats | 
+    where-object ImageType -eq "LIGHT" |
+    group-object Instrument,SetTemp,Gain,Offset,Exposure |
+    foreach-object {
+        $lights = $_.Group
+        $x=$lights[0]
+
+        $instrument=$x.Instrument
+        $gain=[decimal]$x.Gain
+        $offset=[decimal]$x.Offset
+        $exposure=[decimal]$x.Exposure
+        $setTemp=[decimal]$x.SetTemp
+        $masterDark = $DarkLibrary | where-object {
+            $dark = $_
+            ($dark.Instrument-eq $instrument) -and
+            ($dark.Gain-eq $gain) -and
+            ($dark.Offset-eq $offset) -and
+            ($dark.Exposure-eq $exposure) -and
+            ($dark.SetTemp-eq $setTemp)
+        } | select-object -first 1
+
+        if(-not $masterDark){
+            Write-Warning "Unable to process $($lights.Count) images: No master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp"
+        }else {
+            Write-Host "Master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp"
+            $lights |
+                group-object Filter,FocalLength |
+                foreach-object {
+                    $filter = $_.Group[0].Filter
+                    $focalLength=$_.Group[0].FocalLength
+                    $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20200418.MasterFlatCal.$filter.xisf"
+                    Write-Host "Sorting $($_.Group.Count) frames at ($focalLength)mm with filter $filter"
+
+                    Invoke-LightFrameSorting `
+                        -XisfStats ($_.Group) -ArchiveDirectory $ArchiveDirectory `
+                        -MasterDark ($masterDark.Path) `
+                        -MasterFlat $masterFlat `
+                        -OutputPath $CalibratedOutput `
+                        -PixInsightSlot 200 `
+                        -OutputPedestal 75 `
+                        -Verbose
+
+                }
+        }
+    }
+
+
+exit
 $('L','R','G','B')|foreach-object {
     Invoke-LightFrameSorting `
     -DropoffLocation $DropoffLocation -ArchiveDirectory $ArchiveDirectory `
-    -MasterDark "E:\Astrophotography\DarkLibrary\ZWO ASI183MM Pro\20200328.MasterDark.-15C.60x15s.xisf" `
+    -MasterDark "E:\Astrophotography\DarkLibrary\ZWO ASI183MM Pro\20200422.MasterDark.Gain.111.Offset.8.-15C.60x15s.xisf" `
     -MasterFlat "E:\Astrophotography\1000mm\Flats\20200324.MasterFlatCal.$_.xisf" `
     -Filter $_ -FocalLength 1000 -Exposure 15 -Gain 111 -Offset 8 -SetTemp -15  `
+    -OutputPath $CalibratedOutput `
+    -PixInsightSlot 200 `
+    -Verbose
+}
+
+$('L','R','G','B')|foreach-object {
+    Invoke-LightFrameSorting `
+    -DropoffLocation $DropoffLocation -ArchiveDirectory $ArchiveDirectory `
+    -MasterDark "E:\Astrophotography\DarkLibrary\ZWO ASI183MM Pro\20200422.MasterDark.Gain.111.Offset.8.-15C.60x30s.xisf" `
+    -MasterFlat "E:\Astrophotography\1000mm\Flats\20200324.MasterFlatCal.$_.xisf" `
+    -Filter $_ -FocalLength 1000 -Exposure 30 -Gain 111 -Offset 8 -SetTemp -15  `
     -OutputPath $CalibratedOutput `
     -PixInsightSlot 200 `
     -Verbose
@@ -35,7 +142,7 @@ $('L','R','G','B')|foreach-object {
 $('L','R','G','B')|foreach-object {
     Invoke-LightFrameSorting `
     -DropoffLocation $DropoffLocation -ArchiveDirectory $ArchiveDirectory `
-    -MasterDark "E:\Astrophotography\DarkLibrary\ZWO ASI183MM Pro\20200329.MasterDark.-5C.60x60s.xisf" `
+    -MasterDark "E:\Astrophotography\DarkLibrary\ZWO ASI183MM Pro\20200329.MasterDark.Gain.111.Offset.8.-5C.60x60s.xisf" `
     -MasterFlat "E:\Astrophotography\1000mm\Flats\20200324.MasterFlatCal.$_.xisf" `
     -Filter $_ -FocalLength 1000 -Exposure 60 -Gain 111 -Offset 8 -SetTemp -5  `
     -OutputPath $CalibratedOutput `
@@ -54,8 +161,8 @@ $('L','R','G','B')|foreach-object {
 $('L','R','G','B')|foreach-object {
     Invoke-LightFrameSorting `
     -DropoffLocation $DropoffLocation -ArchiveDirectory $ArchiveDirectory `
-    -MasterDark "D:\Backups\Camera\ASI183mm-Pro\20190909\25x60s.-15C.G111.O8.masterdark.nocalibration.xisf" `
-    -MasterFlat "E:\Astrophotography\1000mm\Flats\20200324.MasterFlatCal.$_.xisf" `
+    -MasterDark "E:\Astrophotography\DarkLibrary\ZWO ASI183MM Pro\20200422.MasterDark.Gain.111.Offset.8.-15C.45x60s.xisf" `
+    -MasterFlat "E:\Astrophotography\1000mm\Flats\20200418.MasterFlatCal.$_.xisf" `
     -Filter $_ -FocalLength 1000 -Exposure 60 -Gain 111 -Offset 8 -SetTemp -15 -OutputPedestal 150 `
     -OutputPath $CalibratedOutput `
     -PixInsightSlot 200
@@ -63,18 +170,18 @@ $('L','R','G','B')|foreach-object {
 $('L','R','G','B')|foreach-object {
     Invoke-LightFrameSorting `
         -DropoffLocation $DropoffLocation -ArchiveDirectory $ArchiveDirectory `
-        -MasterDark "D:\Backups\Camera\ASI183mm-Pro\20191220\30x240s.-15C.G111.O8.masterdark.nocalibration.xisf" `
-        -MasterFlat "E:\Astrophotography\1000mm\Flats\20200324.MasterFlatCal.$_.xisf" `
-        -Filter $_ -FocalLength 1000 -Exposure 240 -Gain 111 -Offset 8 -SetTemp -15 -OutputPedestal 150  `
+        -MasterDark "D:\Backups\Camera\ASI183mm-Pro\20191220\30x120s.-15C.G111.O8.masterdark.nocalibration.xisf" `
+        -MasterFlat "E:\Astrophotography\1000mm\Flats\20200418.MasterFlatCal.$_.xisf" `
+        -Filter $_ -FocalLength 1000 -Exposure 120 -Gain 111 -Offset 8 -SetTemp -15 -OutputPedestal 150  `
         -OutputPath $CalibratedOutput `
         -PixInsightSlot 200
 }
-$('L','R','G','B')|foreach-object {
+$('Ha','Oiii','Sii','L','R','G','B')|foreach-object {
     Invoke-LightFrameSorting `
         -DropoffLocation $DropoffLocation -ArchiveDirectory $ArchiveDirectory `
-        -MasterDark "D:\Backups\Camera\ASI183mm-Pro\20191220\30x120s.-15C.G111.O8.masterdark.nocalibration.xisf" `
-        -MasterFlat "E:\Astrophotography\1000mm\Flats\20200324.MasterFlatCal.$_.xisf" `
-        -Filter $_ -FocalLength 1000 -Exposure 120 -Gain 111 -Offset 8 -SetTemp -15 -OutputPedestal 150  `
+        -MasterDark "E:\Astrophotography\DarkLibrary\ZWO ASI183MM Pro\20200422.MasterDark.Gain.111.Offset.8.-15C.45x240s.xisf" `
+        -MasterFlat "E:\Astrophotography\1000mm\Flats\20200418.MasterFlatCal.$_.xisf" `
+        -Filter $_ -FocalLength 1000 -Exposure 240 -Gain 111 -Offset 8 -SetTemp -15 -OutputPedestal 150  `
         -OutputPath $CalibratedOutput `
         -PixInsightSlot 200
 }
@@ -82,27 +189,8 @@ $('Ha','Oiii','Sii')|foreach-object {
     Invoke-LightFrameSorting `
         -DropoffLocation $DropoffLocation -ArchiveDirectory $ArchiveDirectory `
         -MasterDark "D:\Backups\Camera\ASI183mm-Pro\20191220\74x600s.-15C.G53.O10.masterdark.nocalibration.xisf" `
-        -MasterFlat "E:\Astrophotography\1000mm\Flats\20200306.MasterFlatCal.$_.xisf" `
+        -MasterFlat "E:\Astrophotography\1000mm\Flats\20200418.MasterFlatCal.$_.xisf" `
         -Filter $_ -FocalLength 1000 -Exposure 600 -Gain 53 -Offset 10 -SetTemp -15  `
         -OutputPath $CalibratedOutput `
         -PixInsightSlot 200
-}
-
-$('Ha')|foreach-object {
-    Invoke-LightFrameSorting `
-        -DropoffLocation $DropoffLocation -ArchiveDirectory $ArchiveDirectory `
-        -MasterDark "D:\Backups\Camera\ASI183mm-Pro\20191220\30x240s.-15C.G111.O8.masterdark.nocalibration.xisf" `
-        -MasterFlat "E:\Astrophotography\1000mm\Flats\20200306.MasterFlatCal.$_.xisf" `
-        -Filter $_ -FocalLength 1000 -Exposure 240 -Gain 111 -Offset 8 -OutputPedestal 150 -SetTemp -15 `
-        -OutputPath $CalibratedOutput `
-        -PixInsightSlot 200 -Verbose
-}
-$('Oiii','Sii')|foreach-object {
-    Invoke-LightFrameSorting `
-        -DropoffLocation $DropoffLocation -ArchiveDirectory $ArchiveDirectory `
-        -MasterDark "D:\Backups\Camera\ASI183mm-Pro\20191220\30x240s.-15C.G111.O8.masterdark.nocalibration.xisf" `
-        -MasterFlat "E:\Astrophotography\1000mm\Flats\20200406.MasterFlatCal.$_.xisf" `
-        -Filter $_ -FocalLength 1000 -Exposure 240 -Gain 111 -Offset 8 -OutputPedestal 150 -SetTemp -15 `
-        -OutputPath $CalibratedOutput `
-        -PixInsightSlot 200 -Verbose
 }
