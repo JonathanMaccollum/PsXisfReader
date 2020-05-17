@@ -40,20 +40,35 @@ $withStats=$data |
     }
 $cache|Export-Clixml -Path $PathToCache -Force
 
-
+$ErrorActionPreference="STOP"
 # acquisition stats by month
 $withStats|
     where-object ImageType -eq 'LIGHT' |
     where-object ImageType -NE $null |
-    sort-object ObsDateMinus12hr |
     group-object {
         $obsDate=$_.ObsDateMinus12hr
-        $obsDate.AddDays(-$obsDate.Day+1).ToString("yyyy-MM")
+        if($obsDate -is [DateTime]){
+            $obsDate.AddDays(-$obsDate.Day+1).ToString("yyyy-MM")
+        }        
     } |
+    sort-object ObsDateMinus12hr |
     foreach-object {
         $sum=($_.Group|measure-object Exposure -Sum)
     
         "$($_.Name) - $([TimeSpan]::FromSeconds($sum.Sum).TotalHours.ToString("0.00"))hrs"
+
+        $_.Group| group-object Object |
+        foreach-object {
+            $sum=($_.Group|measure-object Exposure -Sum)
+            new-object psobject -Property @{
+                ExposureTimeSeconds = ($sum.Sum)
+                Object = $_.Name
+            }
+        } | 
+        sort-object ExposureTimeSeconds -Descending |
+        foreach-object {
+            "    $($_.Object) - $([TimeSpan]::FromSeconds($_.ExposureTimeSeconds).TotalHours.ToString("0.00"))hrs"
+        }
     }
 
 # by target
