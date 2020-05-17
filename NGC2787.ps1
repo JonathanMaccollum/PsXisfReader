@@ -70,7 +70,7 @@ $calibrated = $data |
             + 15*(SNRWeight-SNRWeightMin)/(SNRWeightMax-SNRWeightMin)
             + 20*(Stars-StarsMin)/(StarsMax-StarsMin))
             + 30" `
-            -ApprovalExpression "FWHM<4.5 && Eccentricity<0.65"
+            -ApprovalExpression "Median<40"
         }
         
         $subframeResults = Get-Content -Path $resultCsv
@@ -159,7 +159,7 @@ $stats | where-object Approved -eq "true" | group-object Filter | foreach-object
         Invoke-PiStarAlignment `
             -PixInsightSlot 200 `
             -Images $toAlign `
-            -ReferencePath ($referenceFrame.Weighted) `
+            -ReferencePath ("E:\Astrophotography\1000mm\NGC2787\Processing\SuperLum.Crop.Dbe.LNRef.xisf") `
             -OutputPath $AlignedOutputPath
 
         $failedAlignemnt = $_.Group | where-object {$_.Aligned -and -not (Test-Path $_.Aligned) -and ($_.Weighted) } | foreach-object {$_.Weighted}
@@ -168,7 +168,7 @@ $stats | where-object Approved -eq "true" | group-object Filter | foreach-object
             Invoke-PiStarAlignment `
                 -PixInsightSlot 200 `
                 -Images $failedAlignemnt `
-                -ReferencePath ($referenceFrame.Weighted) `
+                -ReferencePath ("E:\Astrophotography\1000mm\NGC2787\Processing\SuperLum.Crop.Dbe.LNRef.xisf") `
                 -OutputPath $AlignedOutputPath `
                 -DetectionScales 6
         }
@@ -178,7 +178,7 @@ $stats | where-object Approved -eq "true" | group-object Filter | foreach-object
             Invoke-PiStarAlignment `
                 -PixInsightSlot 200 `
                 -Images $failedAlignemnt `
-                -ReferencePath ($referenceFrame.Weighted) `
+                -ReferencePath ("E:\Astrophotography\1000mm\NGC2787\Processing\SuperLum.Crop.Dbe.LNRef.xisf") `
                 -OutputPath $AlignedOutputPath `
                 -DetectionScales 7 `
                 -KeepOpen

@@ -6,14 +6,15 @@ $CalibrationPath = "E:\PixInsightLT\Calibrated"
 $WeightedOutputPath = "S:\PixInsight\Weighted"
 $AlignedOutputPath = "S:\PixInsight\Aligned"
 
-$BackupCalibrationPaths = @("T:\PixInsightLT\Calibrated","N:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated")
+$BackupCalibrationPaths = @("T:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated")
 
 $data = 
     Get-XisfLightFrames -Path $target -Recurse |
-    where-object {-not $_.Path.FullName.ToLower().Contains("reject")} |
-    where-object {-not $_.Path.FullName.ToLower().Contains("testing")} |
-    where-object {-not $_.Path.FullName.ToLower().Contains("clouds")} |
-    foreach-object {
+    Where-Object {-not $_.Path.FullName.ToLower().Contains("reject")} |
+    Where-Object {-not $_.Path.FullName.ToLower().Contains("testing")} |
+    Where-Object {-not $_.Path.FullName.ToLower().Contains("clouds")} |
+    Where-Object {-not $_.History} |
+    ForEach-Object {
         $x=$_
         $y = Get-CalibrationFile -Path ($x.Path) `
             -CalibratedPath $CalibrationPath `
@@ -44,9 +45,12 @@ $data|group-object Filter,Exposure|foreach-object {
             ExposureTime=([TimeSpan]::FromSeconds($_.Group.Count*$exposure))
             Images=$_.Group
         }
-} | Sort-Object Filter|Format-Table Filter,Exposures,Exposure,ExposureTime
+} | Sort-Object ExposureTime -descending |Format-Table Filter,Exposures,Exposure,ExposureTime
 
-$calibrated = $data |
+
+
+
+$data |
     where-object { $uncalibrated -notcontains $_ } |
     group-object Filter |
     foreach-object {
@@ -95,7 +99,7 @@ $stats = get-childitem $target *.data.csv |
             $y = Get-XisfFitsStats -Path ($x.File.Replace("/","\"))
             $r=$w=$null
             if($x.Approved -eq "true") {
-                $w = Get-Item (join-path $WeightedOutputPath ($y.Path.Name.TrimEnd(".xisf")+"_a.xisf"))
+                $w = join-path $WeightedOutputPath ($y.Path.Name.TrimEnd(".xisf")+"_a.xisf")
                 $r = join-path $AlignedOutputPath ($y.Path.Name.TrimEnd(".xisf")+"_a_r.xisf")
             }
             Add-Member -InputObject $y -Name "Approved" -MemberType NoteProperty -Value ([bool]::Parse($x.Approved))
@@ -124,7 +128,25 @@ $summary = $stats |
         } } 
 $summary |
         Sort-Object Approved,Filter |
-        Format-Table Approved,Filter,Exposures,Exposure,ExposureTime,TopWeight
+        Format-Table Approved,Filter,Exposures,Exposure,ExposureTime
+
+Get-ChildItem $target *.csv|where-object {-not $_.Name.Contains(".Data.")} |
+        foreach-object {
+            $_.FullName
+            $subframeResults = Get-Content $_
+
+            $indexOfCSV=0
+            $csvFound=$false
+            $subframeResults | foreach-object {
+                if($_.StartsWith("Index,Approved,Locked")){                
+                    $csvFound=$true;
+                }
+                if(-not $csvFound){
+                    $indexOfCSV+=1;
+                }            
+            }
+            $subframeResults | Select-Object -First $indexOfCSV
+        }
 
 write-host "Rejected:"
 [TimeSpan]::FromSeconds((
