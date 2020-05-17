@@ -566,6 +566,7 @@ Function Get-CalibrationFile
     $calibrated = Join-Path ($CalibratedPath.FullName) ($calibratedFileName)
     if(-not (test-path $calibrated) -and ($AdditionalSearchPaths)){
         $calibrated = $AdditionalSearchPaths | 
+            where-object { test-path $_ } |
             foreach-object { join-path $_ $calibratedFileName } |
             where-object { test-path $_ } | 
             select-object -first 1
@@ -621,11 +622,11 @@ Function Invoke-LightFrameSorting
     Group-Object Object |
     foreach-object {
         $object = $_.Name
-
+        $OutputDirPerObject = Join-Path ($OutputPath.FullName) $object
         $toCalibrate = $_.Group |
             foreach-object {
                 $x = $_
-                $calibrated = Get-CalibrationFile -Path $_.Path -CalibratedPath $OutputPath -AdditionalSearchPaths $AdditionalSearchPaths
+                $calibrated = Get-CalibrationFile -Path $_.Path -CalibratedPath $OutputDirPerObject -AdditionalSearchPaths $AdditionalSearchPaths
                 Add-Member -InputObject $x -Name "Calibrated" -MemberType NoteProperty -Value $calibrated -Force
                 $x
             } |

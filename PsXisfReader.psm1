@@ -46,6 +46,7 @@ Function Get-XisfFitsStats
         }
         else
         {
+            $result=$null
             $stream = [System.IO.File]::OpenRead($Path.FullName)
             $reader=new-object System.IO.BinaryReader $stream
             try
@@ -87,7 +88,6 @@ Function Get-XisfFitsStats
                 {
                     $Cache.Add($Path.FullName,$result)
                 }
-                Write-Output $result
             }
             catch [System.Xml.XmlException]{
                 Write-Warning ("An error occured reading the file "+($Path.FullName))
@@ -97,6 +97,10 @@ Function Get-XisfFitsStats
             {
                 $reader.Dispose()
                 $stream.Dispose()
+            }
+
+            if($result){
+                Write-Output $result
             }
         }
     }

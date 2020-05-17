@@ -11,16 +11,19 @@ $BackupCalibrationPaths = @("T:\PixInsightLT\Calibrated","N:\PixInsightLT\Calibr
 $data = 
     Get-XisfLightFrames -Path $target -Recurse |
     where-object {-not $_.Path.FullName.ToLower().Contains("reject")} |
+    where-object {-not $_.Path.FullName.ToLower().Contains("process")} |
     where-object {-not $_.Path.FullName.ToLower().Contains("testing")} |
     where-object {-not $_.Path.FullName.ToLower().Contains("clouds")} |
+    Where-Object {-not $_.History} |
     foreach-object {
         $x=$_
         $y = Get-CalibrationFile -Path ($x.Path) `
-            -CalibratedPath $CalibrationPath `
+            -CalibratedPath (Join-Path $CalibrationPath $x.Object) `
             -AdditionalSearchPaths $BackupCalibrationPaths
         Add-Member -InputObject $x -Name "Calibrated" -MemberType NoteProperty -Value $y -Force
         $x
     }
+
 $uncalibrated = $data | where-object {-not $_.Calibrated}
 if($uncalibrated){
     $uncalibrated|foreach-object {
