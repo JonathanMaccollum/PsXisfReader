@@ -71,6 +71,7 @@ $DarkLibrary=($DarkLibraryFiles|group-object Instrument,Gain,Offset,Exposure,Set
 
 Get-ChildItem $DropoffLocation *.xisf |
     Get-XisfFitsStats | 
+    where-object Instrument -eq "ZWO ASI183MM Pro" |
     where-object ImageType -eq "LIGHT" |
     group-object Instrument,SetTemp,Gain,Offset,Exposure |
     foreach-object {
@@ -100,18 +101,24 @@ Get-ChildItem $DropoffLocation *.xisf |
                 foreach-object {
                     $filter = $_.Group[0].Filter
                     $focalLength=$_.Group[0].FocalLength
-                    $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20200418.MasterFlatCal.$filter.xisf"
-                    Write-Host "Sorting $($_.Group.Count) frames at ($focalLength)mm with filter $filter"
+                    $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20200508.MasterFlatCal.$filter.xisf"
 
-                    Invoke-LightFrameSorting `
-                        -XisfStats ($_.Group) -ArchiveDirectory $ArchiveDirectory `
-                        -MasterDark ($masterDark.Path) `
-                        -MasterFlat $masterFlat `
-                        -OutputPath $CalibratedOutput `
-                        -PixInsightSlot 200 `
-                        -OutputPedestal 75 `
-                        -Verbose
+                    if(-not (test-path $masterFlat)) {
+                        Write-Warning "Skipping $($_.Group.Count) frames at ($focalLength)mm with filter $filter. Reason: No master flat was found."
+                    }
+                    else{
 
+                        Write-Host "Sorting $($_.Group.Count) frames at ($focalLength)mm with filter $filter"
+
+                        Invoke-LightFrameSorting `
+                            -XisfStats ($_.Group) -ArchiveDirectory $ArchiveDirectory `
+                            -MasterDark ($masterDark.Path) `
+                            -MasterFlat $masterFlat `
+                            -OutputPath $CalibratedOutput `
+                            -PixInsightSlot 200 `
+                            -OutputPedestal 75 `
+                            -Verbose
+                    }
                 }
         }
     }
