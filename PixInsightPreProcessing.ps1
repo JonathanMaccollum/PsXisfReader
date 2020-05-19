@@ -1,6 +1,7 @@
-﻿[CmdletBinding]
-Function Wait-PixInsightInstance([int]$PixInsightSlot)
+﻿Function Wait-PixInsightInstance([int]$PixInsightSlot)
 {
+    [CmdletBinding]
+
     $x = Get-Process -Name "pixinsight" 
     if($PixInsightSlot) {
         $x = $x | where-object MainWindowTitle -eq "PixInsight ($PixInsightSlot)"
@@ -190,6 +191,7 @@ Function Invoke-PiDarkIntegration
     P.useFileThreads = true;
     P.fileThreadOverload = 1.00;
     P.images= [`r`n     $ImageDefinition`r`n   ];
+    P.launch();
     P.executeGlobal();"
     $executionScript = New-TemporaryFile
     $executionScript = Rename-Item ($executionScript.FullName) ($executionScript.FullName+".js") -PassThru
@@ -257,6 +259,7 @@ Function Invoke-PiFlatIntegration
     P.useFileThreads = true;
     P.fileThreadOverload = 1.00;
     P.images= [`r`n     $ImageDefinition`r`n   ];
+    P.launch();
     P.executeGlobal();"
     $executionScript = New-TemporaryFile
     $executionScript = Rename-Item ($executionScript.FullName) ($executionScript.FullName+".js") -PassThru
@@ -316,6 +319,7 @@ P.overwriteExistingFiles = false;
 P.onError = ImageCalibration.prototype.Abort;
 P.noGUIMessages = true;
     P.targetFrames= [`r`n     $ImageDefinition`r`n   ];
+    P.launch();
     P.executeGlobal();"
     $executionScript = New-TemporaryFile
     $executionScript = Rename-Item ($executionScript.FullName) ($executionScript.FullName+".js") -PassThru
@@ -379,6 +383,7 @@ P.overwriteExistingFiles = false;
 P.onError = ImageCalibration.prototype.Abort;
 P.noGUIMessages = true;
     P.targetFrames= [`r`n     $ImageDefinition`r`n   ];
+    P.launch();
     P.executeGlobal();"
     $executionScript = New-TemporaryFile
     $executionScript = Rename-Item ($executionScript.FullName) ($executionScript.FullName+".js") -PassThru
@@ -394,13 +399,132 @@ P.noGUIMessages = true;
     }
 } 
 
+Function Invoke-PiCosmeticCorrection
+{
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory=$true)][int]$PixInsightSlot,
+        [Parameter(Mandatory=$true)][System.IO.FileInfo[]]$Images,
+        [Parameter(Mandatory=$true)][System.IO.FileInfo]$MasterDark,
+        [Parameter(Mandatory=$true)][System.IO.DirectoryInfo]$OutputPath,
+        [Parameter(Mandatory=$false)][Switch]$KeepOpen,
+        [Parameter()][Switch]$CFAImages,
+        [Parameter(Mandatory=$false)][double]$HotDarkLevel=0.666666
+    )
+    $masterDarkPath = Get-Item $MasterDark | Format-PiPath
+    $outputDirectory = Get-Item ($OutputPath.FullName) | Format-PiPath
+    $ImageDefinition = [string]::Join("`r`n   , ",
+    ($Images | ForEach-Object {
+        $x=$_|Format-PiPath
+        "[true, ""$x""]"
+    }))
+    $IntegrationDefinition = 
+    "var P = new CosmeticCorrection;
+P.useMasterDark = true;
+P.masterDarkPath = `"$masterDarkPath`";
+P.outputDir = `"$outputDirectory`";
+P.outputExtension = `".xisf`";
+P.prefix = `"`";
+P.postfix = `"_cc`";
+P.overwrite = false;
+P.amount = 1.00;
+P.cfa = $($CFAImages.IsPresent.ToString().ToLower());
+P.useMasterDark = true;
+P.hotDarkCheck = true;
+P.hotDarkLevel = $HotDarkLevel;
+P.coldDarkCheck = false;
+P.coldDarkLevel = 0.0000000;
+P.useAutoDetect = false;
+P.hotAutoCheck = false;
+P.hotAutoValue = 3.0;
+P.coldAutoCheck = false;
+P.coldAutoValue = 3.0;
+P.useDefectList = false;
+P.defects = [ // defectEnabled, defectIsRow, defectAddress, defectIsRange, defectBegin, defectEnd
+];
+
+
+    P.targetFrames= [`r`n     $ImageDefinition`r`n   ];
+    P.launch();
+    P.executeGlobal();"
+    $executionScript = New-TemporaryFile
+    $executionScript = Rename-Item ($executionScript.FullName) ($executionScript.FullName+".js") -PassThru
+    try {
+        $IntegrationDefinition|Out-File -FilePath $executionScript -Force 
+        Invoke-PICalibrationScript `
+            -path $executionScript `
+            -PixInsightSlot $PixInsightSlot `
+            -KeepOpen:$KeepOpen
+    }
+    finally {
+        Remove-Item $executionScript -Force
+    }
+} 
+
+Function Invoke-PiDebayer
+{
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory=$true)][int]$PixInsightSlot,
+        [Parameter(Mandatory=$true)][System.IO.FileInfo[]]$Images,
+        [Parameter(Mandatory=$true)][System.IO.DirectoryInfo]$OutputPath,
+        [Parameter(Mandatory=$false)][Switch]$KeepOpen,
+        [Parameter()][Switch]$CFAImages
+    )
+    $outputDirectory = Get-Item ($OutputPath.FullName) | Format-PiPath
+    $ImageDefinition = [string]::Join("`r`n   , ",
+    ($Images | ForEach-Object {
+        $x=$_|Format-PiPath
+        "[true, ""$x""]"
+    }))
+    $IntegrationDefinition = 
+    "
+    var P = new Debayer;
+    P.cfaPattern = Debayer.prototype.Auto;
+    P.debayerMethod = Debayer.prototype.VNG;
+    P.fbddNoiseReduction = 0;
+    P.evaluateNoise = true;
+    P.noiseEvaluationAlgorithm = Debayer.prototype.NoiseEvaluation_MRS;
+    P.showImages = true;
+    P.cfaSourceFilePath = `"`";
+    P.noGUIMessages = true;
+    P.inputHints = `"raw cfa`";
+    P.outputHints = `"`";
+    P.outputDirectory = `"$outputDirectory`";
+    P.outputExtension = `".xisf`";
+    P.outputprefix = `"`";
+    P.outputPostfix = `"_d`";
+    P.overwriteExistingFiles = false;
+    P.onError = Debayer.prototype.OnError_Continue;
+    P.useFileThreads = true;
+    P.fileThreadOverload = 1.00;
+    P.maxFileReadThreads = 1;
+    P.maxFileWriteThreads = 1;
+    P.targetItems= [`r`n     $ImageDefinition`r`n   ];
+    P.launch();
+    P.executeGlobal();"
+    $executionScript = New-TemporaryFile
+    $executionScript = Rename-Item ($executionScript.FullName) ($executionScript.FullName+".js") -PassThru
+    try {
+        $IntegrationDefinition|Out-File -FilePath $executionScript -Force 
+        Invoke-PICalibrationScript `
+            -path $executionScript `
+            -PixInsightSlot $PixInsightSlot `
+            -KeepOpen:$KeepOpen
+    }
+    finally {
+        Remove-Item $executionScript -Force
+    }
+}
+
 Function Invoke-DarkFrameSorting
 {
     [CmdletBinding()]
     param (
         [System.IO.DirectoryInfo]$DropoffLocation,
         [System.IO.DirectoryInfo]$ArchiveDirectory,
-        [int]$PixInsightSlot
+        [int]$PixInsightSlot,
+        [Switch]$KeepOpen
     )
 
     Get-ChildItem $DropoffLocation "*.xisf" |
@@ -424,7 +548,8 @@ Function Invoke-DarkFrameSorting
             Invoke-PiDarkIntegration `
                 -Images $darkFlats `
                 -PixInsightSlot $PixInsightSlot `
-                -OutputFile $masterDark
+                -OutputFile $masterDark `
+                -KeepOpen:$KeepOpen
         }
         $destinationDirectory=join-path $targetDirectory $date
         [System.IO.Directory]::CreateDirectory($destinationDirectory)>>$null
@@ -563,6 +688,7 @@ Function Get-CalibrationFile
         [Parameter()][System.IO.DirectoryInfo[]]$AdditionalSearchPaths
     )
     $calibratedFileName = $Path.Name.Substring(0,$Path.Name.Length-$Path.Extension.Length)+"_c.xisf"
+
     $calibrated = Join-Path ($CalibratedPath.FullName) ($calibratedFileName)
     if(-not (test-path $calibrated) -and ($AdditionalSearchPaths)){
         $calibrated = $AdditionalSearchPaths | 
@@ -623,6 +749,7 @@ Function Invoke-LightFrameSorting
     foreach-object {
         $object = $_.Name
         $OutputDirPerObject = Join-Path ($OutputPath.FullName) $object
+        [System.IO.Directory]::CreateDirectory($OutputDirPerObject) >> $null
         $toCalibrate = $_.Group |
             foreach-object {
                 $x = $_
@@ -637,7 +764,7 @@ Function Invoke-LightFrameSorting
                 -Images $toCalibrate `
                 -MasterDark $MasterDark `
                 -MasterFlat $MasterFlat `
-                -OutputPath $OutputPath `
+                -OutputPath $OutputDirPerObject `
                 -OutputPedestal $OutputPedestal `
                 -PixInsightSlot $PixInsightSlot `
                 -KeepOpen:$KeepOpen
@@ -1007,3 +1134,348 @@ Function Invoke-PiLightIntegration
         Remove-Item $executionScript -Force
     }
 } 
+
+class XisfPreprocessingState {
+    [XisfFileStats]$Stats
+    [System.IO.FileInfo]$Path
+
+    [string]$MasterDark
+    [string]$MasterFlat
+
+    [System.IO.FileInfo]$Calibrated
+    [System.IO.FileInfo]$Corrected
+    [System.IO.FileInfo]$Debayered
+    [System.IO.FileInfo]$Weighted
+    [System.IO.FileInfo]$Aligned
+
+    [bool]IsCalibrated() {
+        return $this.Calibrated `
+            -and $this.Calibrated.Exists
+    }
+    [bool]IsCorrected() {
+        return $this.Corrected `
+            -and $this.Corrected.Exists
+    }
+    [bool]IsDebayered() {
+        return `
+                 $this.Debayered `
+            -and $this.Debayered.Exists
+    }
+    [bool]IsWeighted() {
+        return `
+                 $this.Weighted `
+            -and $this.Weighted.Exists
+    }
+    [bool]IsAligned() {
+        return `
+                 $this.Aligned `
+            -and $this.Aligned.Exists
+    }
+}
+
+function New-XisfPreprocessingState {
+    [OutputType([XisfPreprocessingState])]
+    param(
+        [Parameter(Mandatory=$true)][XisfFileStats]$Stats,
+        [Parameter(Mandatory=$false)][string]$MasterDark,
+        [Parameter(Mandatory=$false)][string]$MasterFlat,
+
+        [Parameter(Mandatory=$false)][System.IO.FileInfo]$Calibrated,
+        [Parameter(Mandatory=$false)][System.IO.FileInfo]$Corrected,
+        [Parameter(Mandatory=$false)][System.IO.FileInfo]$Debayered,
+        [Parameter(Mandatory=$false)][System.IO.FileInfo]$Weighted,
+        [Parameter(Mandatory=$false)][System.IO.FileInfo]$Aligned
+    )
+
+    if((-not $MasterDark) -and ($Stats.History)) {
+        $MasterDark = $Stats.History |
+            where-object {$_.StartsWith("ImageCalibration.masterDark.fileName")} |
+            foreach-object {$_.Split(":")[1].Trim()} |
+            select-object -First 1
+    }
+    if((-not $MasterFlat) -and ($Stats.History)) {
+        $MasterFlat = $Stats.History |
+            where-object {$_.StartsWith("ImageCalibration.masterFlat.fileName")} |
+            foreach-object {$_.Split(":")[1].Trim()} |
+            select-object -First 1
+    }
+
+    [XisfPreprocessingState]@{
+        Stats      = $Stats
+        Path       = $Stats.Path
+        MasterDark = $MasterDark
+        MasterFlat = $MasterFlat
+        Calibrated = $Calibrated
+        Corrected  = $Corrected
+        Debayered  = $Debayered
+        Weighted   = $Weighted
+        Aligned    = $Aligned
+    }
+}
+
+function  Get-XisfCalibrationState {
+    [OutputType([XisfPreprocessingState])]
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory,ValueFromPipeline=$true)][XisfFileStats]$XisfFileStats,
+        [Parameter(Mandatory)][System.IO.DirectoryInfo]$CalibratedPath,
+        [Parameter()][System.IO.DirectoryInfo[]]$AdditionalSearchPaths,
+        [Parameter()][Switch]$Recurse
+    )
+    process{
+        $Path=$XisfFileStats.Path
+        $Target=$XisfFileStats.Object
+        $calibratedFileName = $Path.Name.Substring(0,$Path.Name.Length-$Path.Extension.Length)+"_c.xisf"
+
+        $calibrated = Join-Path ($CalibratedPath.FullName) $calibratedFileName
+        if(test-path $calibrated){
+            return New-XisfPreprocessingState `
+                -Stats $XisfFileStats `
+                -Calibrated $calibrated
+        }
+
+        #try a target specific subfolder
+        $calibrated = Join-Path ($CalibratedPath.FullName) $Target $calibratedFileName
+        if(test-path $calibrated){
+            return New-XisfPreprocessingState `
+                -Stats $XisfFileStats `
+                -Calibrated $calibrated
+        }
+
+        #try to find a file in any subfolder
+        $calibrated = 
+            Get-ChildItem $CalibratedPath -Recurse:$Recurse -Filter $calibratedFileName |
+            Select-Object -First 1
+        if($calibrated) {
+            return New-XisfPreprocessingState `
+                -Stats $XisfFileStats `
+                -Calibrated $calibrated
+        }
+
+        if(($AdditionalSearchPaths)){
+            Write-Warning "Unable to locate calibration frame... checking additional search paths for $calibratedFileName"
+            $calibrated = $AdditionalSearchPaths | 
+                Where-Object { test-path $_ } |
+                ForEach-Object { 
+                    Get-ChildItem -Recurse:$Recurse -Path $_ -Filter $calibratedFileName
+                } |
+                Where-Object { test-path $_ } | 
+                Select-Object -first 1
+            if($calibrated) {
+                return New-XisfPreprocessingState `
+                    -Stats $XisfFileStats `
+                    -Calibrated $calibrated
+            }
+        }
+        
+        return New-XisfPreprocessingState `
+            -Stats $XisfFileStats
+    }
+}
+
+function Get-XisfCosmeticCorrectionState{
+    [OutputType([XisfPreprocessingState])]
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory,ValueFromPipeline=$true)][XisfPreprocessingState]$State,
+        [Parameter(Mandatory)][System.IO.DirectoryInfo]$CosmeticCorrectionPath
+    )
+    process{
+        if(-not $State.IsCalibrated()){
+            return $State
+        }
+
+        $XisfFileStats=$State.Stats
+        $Target=$XisfFileStats.Object
+        $Path=$State.Calibrated
+        $cosmeticallyCorrectedFileName = $Path.Name.Substring(0,$Path.Name.Length-$Path.Extension.Length)+"_cc.xisf"
+
+        $cosmeticallyCorrected = Join-Path ($CosmeticCorrectionPath.FullName) $cosmeticallyCorrectedFileName
+        if(test-path $cosmeticallyCorrected){
+            return New-XisfPreprocessingState `
+                -Stats $XisfFileStats `
+                -Calibrated $State.Calibrated `
+                -MasterDark $State.MasterDark `
+                -MasterFlat $State.MasterFlat `
+                -Corrected $cosmeticallyCorrected
+        }
+
+        #try a target specific subfolder
+        $cosmeticallyCorrected = Join-Path ($CosmeticCorrectionPath.FullName) $Target $cosmeticallyCorrectedFileName
+        if(test-path $cosmeticallyCorrected){
+            return New-XisfPreprocessingState `
+                -Stats $XisfFileStats `
+                -Calibrated $State.Calibrated `
+                -MasterDark $State.MasterDark `
+                -MasterFlat $State.MasterFlat `
+                -Corrected $cosmeticallyCorrected
+        }
+
+        return $State
+    }
+}
+
+
+function Get-XisfDebayerState{
+    [OutputType([XisfPreprocessingState])]
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory,ValueFromPipeline=$true)][XisfPreprocessingState]$State,
+        [Parameter(Mandatory)][System.IO.DirectoryInfo]$DebayerPath
+    )
+    process{
+        if($State.IsDebayered() -or (-not $State.IsCalibrated())){
+            return $State
+        }
+
+        $XisfFileStats=$State.Stats
+        $Target=$XisfFileStats.Object
+        if($State.IsWeighted()) {
+            $Path = $State.Weighted
+        }
+        elseif($State.IsCorrected()) {
+            $Path = $State.Corrected
+        }
+
+        $debayeredFileName = $Path.Name.Substring(0,$Path.Name.Length-$Path.Extension.Length)+"_d.xisf"
+        $debayered = Join-Path ($DebayerPath.FullName) $debayeredFileName
+        if(test-path $debayered){
+            return New-XisfPreprocessingState `
+                -Stats $XisfFileStats `
+                -Calibrated $State.Calibrated `
+                -MasterDark $State.MasterDark `
+                -MasterFlat $State.MasterFlat `
+                -Corrected $State.Corrected `
+                -Debayered $debayered
+        }
+
+        #try a target specific subfolder
+        $debayered = Join-Path ($DebayerPath.FullName) $Target $debayeredFileName
+        if(test-path $debayered){
+            return New-XisfPreprocessingState `
+                -Stats $XisfFileStats `
+                -Calibrated $State.Calibrated `
+                -MasterDark $State.MasterDark `
+                -MasterFlat $State.MasterFlat `
+                -Corrected $State.Corrected `
+                -Debayered $debayered
+        }
+
+        return $State
+    }
+}
+
+function Get-XisfSubframeSelectorState{
+    [OutputType([XisfPreprocessingState])]
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory,ValueFromPipeline=$true)][XisfPreprocessingState]$State,
+        [Parameter(Mandatory)][System.IO.DirectoryInfo]$SubframeSelectorPath
+    )
+    process{
+        if($State.IsWeighted() -or (-not $State.IsCalibrated())){
+            return $State
+        }
+
+        $XisfFileStats=$State.Stats
+        $Target=$XisfFileStats.Object
+        if($State.IsDebayered()) {
+            $Path = $State.Debayered
+        }
+        elseif($State.IsCorrected()) {
+            $Path = $State.Corrected
+        }
+        else{
+            $Path=$State.Calibrated
+        }
+
+        $SubframeFileName = $Path.Name.Substring(0,$Path.Name.Length-$Path.Extension.Length)+"_a.xisf"
+
+        $subframe = Join-Path ($SubframeSelectorPath.FullName) $SubframeFileName
+        if(test-path $subframe){
+            return New-XisfPreprocessingState `
+                -Stats $XisfFileStats `
+                -Calibrated $State.Calibrated `
+                -MasterDark $State.MasterDark `
+                -MasterFlat $State.MasterFlat `
+                -Corrected $State.Corrected `
+                -Debayered $State.Debayered `
+                -Weighted $subframe
+        }
+
+        #try a target specific subfolder
+        $subframe = Join-Path ($SubframeSelectorPath.FullName) $Target $SubframeFileName
+        if(test-path $subframe){
+            return New-XisfPreprocessingState `
+                -Stats $XisfFileStats `
+                -Calibrated $State.Calibrated `
+                -MasterDark $State.MasterDark `
+                -MasterFlat $State.MasterFlat `
+                -Corrected $State.Corrected `
+                -Debayered $State.Debayered `
+                -Weighted $subframe
+        }
+
+        return $State
+    }
+}
+
+function Get-XisfAlignedState{
+    [OutputType([XisfPreprocessingState])]
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory,ValueFromPipeline=$true)][XisfPreprocessingState]$State,
+        [Parameter(Mandatory)][System.IO.DirectoryInfo]$AlignedPath
+    )
+    process{
+        if($State.IsAligned() -or (-not $State.IsCalibrated())){
+            return $State
+        }
+
+        $XisfFileStats=$State.Stats
+        $Target=$XisfFileStats.Object
+        if($State.IsWeighted()) {
+            $Path = $State.Weighted
+        }
+        elseif($State.IsDebayered()) {
+            $Path = $State.Debayered
+        }
+        elseif($State.IsCorrected()) {
+            $Path = $State.Corrected
+        }
+        else{
+            $Path=$State.Calibrated
+        }
+
+        $fileName = $Path.Name.Substring(0,$Path.Name.Length-$Path.Extension.Length)+"_r.xisf"
+
+        $aligned = Join-Path ($AlignedPath.FullName) $fileName
+        if(test-path $aligned){
+            return New-XisfPreprocessingState `
+                -Stats $XisfFileStats `
+                -Calibrated $State.Calibrated `
+                -MasterDark $State.MasterDark `
+                -MasterFlat $State.MasterFlat `
+                -Corrected $State.Corrected `
+                -Debayered $State.Debayered `
+                -Weighted $State.Weighted `
+                -Aligned $aligned
+        }
+
+        #try a target specific subfolder
+        $aligned = Join-Path ($AlignedPath.FullName) $Target $fileName
+        if(test-path $aligned){
+            return New-XisfPreprocessingState `
+                -Stats $XisfFileStats `
+                -Calibrated $State.Calibrated `
+                -MasterDark $State.MasterDark `
+                -MasterFlat $State.MasterFlat `
+                -Corrected $State.Corrected `
+                -Debayered $State.Debayered `
+                -Weighted $State.Weighted `
+                -Aligned $aligned
+        }
+
+        return $State
+    }
+}

@@ -1,5 +1,5 @@
-import-module $PSScriptRoot/PsXisfReader.psm1 -Force
-import-module $PSScriptRoot/pixinsightpreprocessing.psm1 -Force
+import-module $PSScriptRoot/PsXisfReader.psd1 -Force
+
 $ErrorActionPreference="STOP"
 
 $DropoffLocation = "D:\Backups\Camera\Dropoff\NINA"
@@ -11,12 +11,10 @@ Invoke-DarkFrameSorting `
     -ArchiveDirectory $ArchiveDirectory `
     -PixInsightSlot 200 `
     -Verbose
-
 Invoke-DarkFlatFrameSorting `
     -DropoffLocation $DropoffLocation `
     -ArchiveDirectory $ArchiveDirectory `
     -PixInsightSlot 200
-
 Invoke-FlatFrameSorting `
     -DropoffLocation $DropoffLocation `
     -ArchiveDirectory $ArchiveDirectory `
@@ -67,7 +65,7 @@ $DarkLibrary=($DarkLibraryFiles|group-object Instrument,Gain,Offset,Exposure,Set
         Path=$dark.Path
     }
 })
-
+exit
 Get-ChildItem $DropoffLocation *.xisf |
     Get-XisfFitsStats | 
     where-object Instrument -eq "ZWO ASI071MC Pro" |
@@ -84,7 +82,7 @@ Get-ChildItem $DropoffLocation *.xisf |
         $setTemp=[decimal]$x.SetTemp
         $masterDark = $DarkLibrary | where-object {
             $dark = $_
-            #($dark.Instrument-eq $instrument) -and
+            ($dark.Instrument-eq $instrument) -and
             ($dark.Gain-eq $gain) -and
             ($dark.Offset-eq $offset) -and
             ($dark.Exposure-eq $exposure) -and

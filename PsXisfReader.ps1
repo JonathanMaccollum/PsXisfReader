@@ -31,9 +31,45 @@ Function Read-XisfHeader([System.IO.BinaryReader]$reader)
         $memoryStream.Dispose()
     }
 }
+
+class XisfFileStats {
+    [decimal]$Exposure
+    [string]$Filter
+    [string]$Instrument
+    [string]$Object
+    [decimal]$Gain
+    [decimal]$Offset
+    [string]$ImageType
+    [decimal]$CCDTemp
+    [decimal]$SetTemp
+    [decimal]$FocalLength
+    [decimal]$FocalRatio
+    [nullable[DateTime]]$ObsDate
+    [nullable[DateTime]]$ObsDateMinus12hr
+    [nullable[DateTime]]$LocalDate
+    [decimal]$SSWeight
+    [decimal]$Pedestal
+    [string[]]$History
+    [System.IO.FileInfo]$Path
+
+    [bool]HasTokensInPath([string[]]$tokens){
+            $hasToken=$false
+            foreach( $x in $tokens) {
+                if($this.Path.FullName.ToLower().Contains($x.ToLower())){
+                    $hasToken=$true
+                    break;
+                }
+            }
+            return $hasToken;
+        }
+    [bool]IsIntegratedFile() {
+        return [bool]($this.History)
+    }
+}
 Function Get-XisfFitsStats
 {
     [CmdletBinding()]
+    [OutputType([XisfFileStats])]
     param
     (
         [Parameter(ValueFromPipeline=$true,Mandatory=$true)][System.IO.FileInfo]$Path,
@@ -64,7 +100,7 @@ Function Get-XisfFitsStats
                 if($obsDate){
                     $obsDateMinus12hr=$obsDate|%{([DateTime]($_.Trim("'"))).AddHours(-12).Date}
                 }
-                $result = new-object psobject -Property @{
+                $results=@{
                     Exposure=$fits.Where{$_.Name -eq 'EXPOSURE'}.value
                     Filter=$filter
                     Instrument=$fits.Where{$_.Name -eq 'INSTRUME'}.value|%{if($_){$_.Trim("'")}}
@@ -76,14 +112,15 @@ Function Get-XisfFitsStats
                     SetTemp=$fits.Where{$_.Name -eq 'SET-TEMP'}.value
                     FocalLength=$fits.Where{$_.Name -eq 'FOCALLEN'}.value
                     FocalRatio=$fits.Where{$_.Name -eq 'FOCRATIO'}.value
-                    ObsDate=$obsDate
+                    ObsDate=$obsDate|%{if($_){$_.Trim("'")}}
                     ObsDateMinus12hr=$obsDateMinus12hr
-                    LocalDate=$fits.Where{$_.Name -eq 'DATE-LOC'}.value
-                    SSWeight=$fits.Where{$_.Name -eq 'SSWEIGHT'}.value
-                    Pedestal=$fits.Where{$_.Name -eq 'PEDESTAL'}.value
+                    LocalDate=$fits.Where{$_.Name -eq 'DATE-LOC'}.value|%{if($_){$_.Trim("'")}}
+                    SSWeight=$fits.Where{$_.Name -eq 'SSWEIGHT'}.value|%{if($_){$_.Trim("'")}}
+                    Pedestal=$fits.Where{$_.Name -eq 'PEDESTAL'}.value|%{if($_){$_.Trim("'")}}
                     History=$fits.Where{$_.Name -eq 'HISTORY'}.comment
                     Path=$Path
                 }
+                $result = [XisfFileStats] $results
                 if($Cache)
                 {
                     $Cache.Add($Path.FullName,$result)
