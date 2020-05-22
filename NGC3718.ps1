@@ -1,38 +1,35 @@
-import-module $PSScriptRoot/pixinsightpreprocessing.psm1 -Force
-import-module $PSScriptRoot/PsXisfReader.psm1
-
+#import-module $PSScriptRoot/pixinsightpreprocessing.psm1 -Force
+import-module $PSScriptRoot/PsXisfReader.psd1 -force
+$ErrorActionPreference="STOP"
 $target="E:\Astrophotography\1000mm\NGC3718"
 $CalibrationPath = "E:\PixInsightLT\Calibrated"
 $WeightedOutputPath = "S:\PixInsight\Weighted"
 $AlignedOutputPath = "S:\PixInsight\Aligned"
 
 $BackupCalibrationPaths = @("T:\PixInsightLT\Calibrated","N:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated")
-
-$data = 
+Clear-Host
+$data =
     Get-XisfLightFrames -Path $target -Recurse |
-    where-object {-not $_.Path.FullName.ToLower().Contains("reject")} |
-    where-object {-not $_.Path.FullName.ToLower().Contains("testing")} |
-    where-object {-not $_.Path.FullName.ToLower().Contains("clouds")} |
+    Where-Object {-not $_.HasTokensInPath(@("reject","process","testing","clouds","draft"))} |
+    Where-Object {-not $_.IsIntegratedFile()} |
+    Get-XisfCalibrationState `
+        -CalibratedPath $CalibrationPath `
+        -AdditionalSearchPaths $BackupCalibrationPaths `
+        -Verbose |
     foreach-object {
-        $x=$_
-        $y = Get-CalibrationFile -Path ($x.Path) `
-            -CalibratedPath $CalibrationPath `
-            -AdditionalSearchPaths $BackupCalibrationPaths
-        Add-Member -InputObject $x -Name "Calibrated" -MemberType NoteProperty -Value $y -Force
-        $x
+        $x = $_
+        if(-not $x.IsCalibrated()){
+            Write-Warning "Uncalibrated frame detected... $($x.Path)"
+            if(-not (Read-Host "Continue?").ToLower().StartsWith("y")){
+                break;
+            }
+        }
+        else {
+            $x
+        }
     }
-$uncalibrated = $data | where-object {-not $_.Calibrated}
-if($uncalibrated){
-    $uncalibrated|foreach-object {
-        Write-Host ($_.Path.Name)
-    }
-    Write-Warning "$($uncalibrated.Length) uncalibrated frames detected"
-    if(-not (Read-Host "Continue?").ToLower().StartsWith("y")){
-        break;
-    }
-}
 
-$data|group-object Filter,Exposure|foreach-object {
+$data.Stats|group-object Filter,Exposure|foreach-object {
     $filter=$_.Group[0].Filter
     $exposure=$_.Group[0].Exposure
         new-object psobject -Property @{
@@ -42,69 +39,22 @@ $data|group-object Filter,Exposure|foreach-object {
             ExposureTime=([TimeSpan]::FromSeconds($_.Group.Count*$exposure))
             Images=$_.Group
         }
-} | Sort-Object Filter|Format-Table Filter,Exposures,Exposure,ExposureTime
+} | Sort-Object Filter,ExposureTime|Format-Table Filter,Exposures,Exposure,ExposureTime
 
-$calibrated = $data |
-    where-object { $uncalibrated -notcontains $_ } |
-    group-object Filter |
-    foreach-object {
-        $images = $_.Group
-        $filter=$images[0].Filter.Trim()
-        $toWeigh = $_.Group.Calibrated
-
-        $resultCsv="$target\Subframe.$filter.csv"
-        $resultData="$target\Subframe.$filter.Data.csv"
-        if(-not (test-path $resultCsv)) {
-            set-clipboard -Value $resultCsv
-            write-host "Starting Subframe Selector... Save the resulting output CSV file to $resultCsv before exiting. (Path copied to clipboard.)"
-            Start-PiSubframeSelectorWeighting `
-            -PixInsightSlot 200 `
-            -OutputPath $WeightedOutputPath `
-            -Images $toWeigh `
-            -WeightingExpression "(5*(1-(FWHM-FWHMMin)/(FWHMMax-FWHMMin))
-            + 15*(1-(Eccentricity-EccentricityMin)/(EccentricityMax-EccentricityMin))
-            + 15*(SNRWeight-SNRWeightMin)/(SNRWeightMax-SNRWeightMin)
-            + 20*(Stars-StarsMin)/(StarsMax-StarsMin))
-            + 30" `
-            -ApprovalExpression "FWHM<4.5 && Eccentricity<0.65"
-        }
-        
-        $subframeResults = Get-Content -Path $resultCsv
-        $indexOfCSV=0
-        $csvFound=$false
-        $subframeResults | foreach-object {
-            if($_.StartsWith("Index,Approved,Locked")){                
-                $csvFound=$true;
-            }
-            if(-not $csvFound){
-                $indexOfCSV+=1;
-            }            
-        }
-        $subframeResults | Select-Object -Skip $indexOfCSV|Out-File -Path $resultData -Force
-        $subframeResults | Select-Object -First $indexOfCSV
-        $subframeData    = Import-Csv -Path "$resultData"|sort-object {[double]$_.Weight} -Descending
-        $subframeData|FT
-    }
-
-$stats = get-childitem $target *.data.csv |
+get-childitem $target *.data.csv |
         import-csv |
         foreach-object {
-            $x=$_
-            $y = Get-XisfFitsStats -Path ($x.File.Replace("/","\"))
-            $r=$w=$null
-            if($x.Approved -eq "true") {
-                $w = Get-Item (join-path $WeightedOutputPath ($y.Path.Name.TrimEnd(".xisf")+"_a.xisf"))
-                $r = join-path $AlignedOutputPath ($y.Path.Name.TrimEnd(".xisf")+"_a_r.xisf")
-            }
-            Add-Member -InputObject $y -Name "Approved" -MemberType NoteProperty -Value ([bool]::Parse($x.Approved))
-            Add-Member -InputObject $y -Name "Weight" -MemberType NoteProperty -Value ([decimal]::Parse($x.Weight))
-            Add-Member -InputObject $y -Name "Weighted" -MemberType NoteProperty -Value ($w)
-            Add-Member -InputObject $y -Name "Aligned" -MemberType NoteProperty -Value ($r)
+            $x = $_
+            $y = $data|where-object {$_.Calibrated.Name -eq ([System.IO.FileInfo]$x.File).Name.Replace("/","\")}
             if($y) {
-                $y
+                $x|Get-Member -MemberType NoteProperty|where-object Name -ne File |foreach-object{
+                $member=$_
+                Add-Member -InputObject ($y.Stats) -Name ($member.Name) -MemberType NoteProperty -Value ($x."$($member.Name)") -Force
+                }
             }
         }
-$summary = $stats |
+exit
+$summary = $data.Stats |
     group-object Approved,Filter,Exposure |
     foreach-object {
         $approved=$_.Values[0]
@@ -124,26 +74,69 @@ $summary |
         Sort-Object Approved,Filter |
         Format-Table Approved,Filter,Exposures,Exposure,ExposureTime,TopWeight
 
-write-host "Rejected:"
-[TimeSpan]::FromSeconds((
-    $summary|where-Object Approved -eq $false | foreach-object {$_.ExposureTime.TotalSeconds} |Measure-Object  -Sum).Sum).ToString()
-write-host "Approved Total:"
-[TimeSpan]::FromSeconds((
-        $summary|where-Object Approved -eq $true|foreach-object {$_.ExposureTime.TotalSeconds} |Measure-Object  -Sum).Sum).ToString()
-Write-Host
-write-host "Approved L:"
-[TimeSpan]::FromSeconds((
-        $summary|where-Object Approved -eq $true | where-object Filter -eq "'L'"|foreach-object {$_.ExposureTime.TotalSeconds} |Measure-Object  -Sum).Sum).ToString()
-write-host "Approved R:"
-[TimeSpan]::FromSeconds((
-        $summary|where-Object Approved -eq $true | where-object Filter -eq "'R'"|foreach-object {$_.ExposureTime.TotalSeconds} |Measure-Object  -Sum).Sum).ToString()
-write-host "Approved G:"
-[TimeSpan]::FromSeconds((
-        $summary|where-Object Approved -eq $true | where-object Filter -eq "'G'"|foreach-object {$_.ExposureTime.TotalSeconds} |Measure-Object  -Sum).Sum).ToString()
-write-host "Approved B:"
-[TimeSpan]::FromSeconds((
-        $summary|where-Object Approved -eq $true | where-object Filter -eq "'B'"|foreach-object {$_.ExposureTime.TotalSeconds} |Measure-Object  -Sum).Sum).ToString()
-        
+$data|
+    where-object {$_.Stats.Approved -eq "true"}|
+    group-object{$_.Stats.Filter} |
+    foreach-object {
+        $filter=$_.Name
+        $images=$_.Group
+        $total=$images.Stats|Measure-ExposureTime
+        new-object psobject -Property @{
+            Filter=$filter
+            Total=$total
+        }
+    } | sort-object Total -descending | FT Filter,Total
+
+$data|
+    where-object {$_.Stats.Approved -eq "true"}|
+    group-object{$_.Stats.Exposure} |
+    foreach-object {
+        $exposure=$_.Name
+        $images=$_.Group
+        $l = ($images.Stats|where-object Filter -eq "L" | Measure-Object).Count
+        $r = ($images.Stats|where-object Filter -eq "R" | Measure-Object).Count
+        $G = ($images.Stats|where-object Filter -eq "G" | Measure-Object).Count
+        $b = ($images.Stats|where-object Filter -eq "B" | Measure-Object).Count
+        $total=($images.Stats|Measure-Object).Count
+        new-object psobject -Property @{
+            Exposure = $exposure
+            L=$l
+            R=$r
+            G=$g
+            B=$b
+            Total=$total
+        }
+    } |
+    sort-object Exposure |
+    Format-Table Exposure,L,R,G,B,Total
+
+    
+$data|
+    where-object {$_.Stats.Approved -eq "true"}|
+    group-object{$_.Stats.ObsDateMinus12hr} |
+    #group-object{[DateTime]::Today} |
+    foreach-object {
+        $date=$_.Name
+        $images=$_.Group
+        $l = $images.Stats|where-object Filter -eq "L" | Measure-ExposureTime
+        $r = $images.Stats|where-object Filter -eq "R" | Measure-ExposureTime
+        $G = $images.Stats|where-object Filter -eq "G" | Measure-ExposureTime
+        $b = $images.Stats|where-object Filter -eq "B" | Measure-ExposureTime
+        $total=$images.Stats|Measure-ExposureTime
+        new-object psobject -Property @{
+            Date=(([DateTime]$date).ToString('yyyyMMdd'))
+            L=$l
+            R=$r
+            G=$g
+            B=$b
+            Total=$total
+        }
+    } |
+    sort-object Date |
+    Format-Table Date,L,R,G,B,Total
+
+exit
+
 
 $referenceFrame = $stats | where-object Approved -eq "true" | where-object Filter -eq "'L'" | sort-object "Weight" -Descending | select-object -first 1
 $stats | where-object Approved -eq "true" | group-object Filter | foreach-object {

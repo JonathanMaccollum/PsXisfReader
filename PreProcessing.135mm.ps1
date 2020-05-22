@@ -65,7 +65,6 @@ $DarkLibrary=($DarkLibraryFiles|group-object Instrument,Gain,Offset,Exposure,Set
         Path=$dark.Path
     }
 })
-exit
 Get-ChildItem $DropoffLocation *.xisf |
     Get-XisfFitsStats | 
     where-object Instrument -eq "ZWO ASI071MC Pro" |
@@ -121,7 +120,7 @@ Get-ChildItem $DropoffLocation *.xisf |
         }
     }
 
-    
+
 
 
 

@@ -95,7 +95,7 @@ Function Get-XisfFitsStats
                 {
                     $filter = $filter.Replace('5nm','').Replace('3nm','')
                 }
-                $obsDate = $fits.Where{$_.Name -eq 'DATE-OBS'}.value
+                $obsDate = $fits.Where{$_.Name -eq 'DATE-OBS'}.value | Select-Object -First 1
                 $obsDateMinus12hr= $null
                 if($obsDate){
                     $obsDateMinus12hr=$obsDate|%{([DateTime]($_.Trim("'"))).AddHours(-12).Date}
@@ -140,5 +140,23 @@ Function Get-XisfFitsStats
                 Write-Output $result
             }
         }
+    }
+}
+
+
+
+Function Measure-ExposureTime
+{
+    param(
+        [Parameter(ValueFromPipeline=$true)][XisfFileStats[]]$Input
+    )
+    begin {
+        $totalSeconds=0.0;
+    }
+    process{
+        $totalSeconds+=$Input.Exposure
+    }
+    end {
+        [TimeSpan]::FromSeconds($totalSeconds)
     }
 }

@@ -469,6 +469,7 @@ Function Invoke-PiDebayer
         [Parameter(Mandatory=$true)][System.IO.FileInfo[]]$Images,
         [Parameter(Mandatory=$true)][System.IO.DirectoryInfo]$OutputPath,
         [Parameter(Mandatory=$false)][Switch]$KeepOpen,
+        [Parameter(Mandatory=$false)][string]$CfaPattern = "Auto",
         [Parameter()][Switch]$CFAImages
     )
     $outputDirectory = Get-Item ($OutputPath.FullName) | Format-PiPath
@@ -480,7 +481,7 @@ Function Invoke-PiDebayer
     $IntegrationDefinition = 
     "
     var P = new Debayer;
-    P.cfaPattern = Debayer.prototype.Auto;
+    P.cfaPattern = Debayer.prototype.$($CfaPattern);
     P.debayerMethod = Debayer.prototype.VNG;
     P.fbddNoiseReduction = 0;
     P.evaluateNoise = true;
@@ -1049,12 +1050,14 @@ Function Invoke-PiLightIntegration
         [Parameter(Mandatory=$false)][Switch]$KeepOpen,
         [Parameter(Mandatory=$false)][decimal]$LinearFitLow=8,
         [Parameter(Mandatory=$false)][decimal]$LinearFitHigh=7,
-        [Parameter(Mandatory=$false)][string]$Rejection = "LinearFit"
+        [Parameter(Mandatory=$false)][string]$Rejection = "LinearFit",
+        [Parameter(Mandatory=$false)][Switch]$GenerateDrizzleData
     )
     $ImageDefinition = [string]::Join("`r`n   , ",
     ($Images | ForEach-Object {
         $x=$_|Format-PiPath
-        "[true, ""$x"", """", """"]"
+        $y=if($GenerateDrizzleData.IsPresent){$x.Replace(".xisf",".xdrz")}else{""}
+        "[true, ""$x"", ""$y"", """"]"
     }))
     $IntegrationDefinition = 
     "var P = new ImageIntegration;
@@ -1098,7 +1101,7 @@ Function Invoke-PiLightIntegration
     P.generate64BitResult = false;
     P.generateRejectionMaps = true;
     P.generateIntegratedImage = true;
-    P.generateDrizzleData = false;
+    P.generateDrizzleData = $($GenerateDrizzleData.IsPresent.ToString().ToLower());
     P.closePreviousImages = false;
     P.bufferSizeMB = 16;
     P.stackSizeMB = 1024;
