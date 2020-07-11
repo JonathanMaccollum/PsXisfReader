@@ -1,7 +1,7 @@
 import-module $PSScriptRoot/PsXisfReader.psd1 -Force
 $ErrorActionPreference="STOP"
 
-$target="E:\Astrophotography\135mm\PatchworkCygnus135_0_0"
+$target="E:\Astrophotography\135mm\M81M82\Panel2"
 $CalibrationPath = "E:\PixInsightLT\Calibrated"
 $CorrectedOutputPath = "S:\PixInsight\Corrected"
 $WeightedOutputPath = "S:\PixInsight\Weighted"
@@ -129,7 +129,8 @@ $data =
                     -PixInsightSlot 200 `
                     -Images ($approved.Path) `
                     -ReferencePath ($reference.Path) `
-                    -OutputPath $AlignedOutputPath
+                    -OutputPath $AlignedOutputPath `
+                    -Interpolation MitchellNetravaliFilter
                 $group |
                     Get-XisfAlignedState `
                         -AlignedPath $AlignedOutputPath
@@ -179,3 +180,34 @@ $mostRecent=
     Select-Object -first 1
 
 $data | Export-Clixml -Path (Join-Path $target "Stats.$($mostRecent.LocalDate.ToString('yyyyMMdd HHmmss')).clixml")
+
+
+
+$finalResults = $data|
+    where-object {$_.IsAligned() -and $_.IsWeighted()} |
+    foreach-object{$_.Aligned} |
+    Get-XisfFitsStats
+
+$bestFrames = $finalResults|where-object {$_.SSWeight -gt 60}
+
+$reference =  $bestFrames  |
+    Sort-Object SSWeight -Descending |
+    Select-Object -First 1
+
+$outputFileName = $reference.Object
+$bestFrames | group-object Exposure | foreach-object {
+    $exposure=$_.Group[0].Exposure;
+    $outputFileName+=".$($_.Group.Count)x$($exposure)s"
+}
+$outputFileName+=".xisf"
+write-host $outputFileName
+$toStack = $bestFrames | sort-object SSWeight -Descending
+$outputFile = Join-Path $target $outputFileName
+if(-not (test-path $outputFile)) {
+    Invoke-PiLightIntegration `
+        -Images ($toStack|foreach-object {$_.Path}) `
+        -OutputFile $outputFile `
+        -KeepOpen `
+        -GenerateDrizzleData `
+        -PixInsightSlot 200
+}
