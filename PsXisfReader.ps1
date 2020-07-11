@@ -93,7 +93,7 @@ Function Get-XisfFitsStats
                 $filter = $fits.Where({$_.Name -eq 'FILTER'}).value
                 if($filter)
                 {
-                    $filter = $filter.Replace('5nm','').Replace('3nm','')
+                    $filter = $filter.Replace('5nm','').Replace('3nm','').Replace("'","")
                 }
                 $obsDate = $fits.Where{$_.Name -eq 'DATE-OBS'}.value | Select-Object -First 1
                 $obsDateMinus12hr= $null
@@ -110,7 +110,7 @@ Function Get-XisfFitsStats
                     ImageType=$fits.Where{$_.Name -eq 'IMAGETYP'}.value|%{if($_){$_.Trim("'")}}
                     CCDTemp=$fits.Where{$_.Name -eq 'CCD-TEMP'}.value
                     SetTemp=$fits.Where{$_.Name -eq 'SET-TEMP'}.value
-                    FocalLength=$fits.Where{$_.Name -eq 'FOCALLEN'}.value
+                    FocalLength=$fits.Where{$_.Name -eq 'FOCALLEN'}.value|%{if($_){$_.Trim("'").TrimEnd("mm")}}
                     FocalRatio=$fits.Where{$_.Name -eq 'FOCRATIO'}.value
                     ObsDate=$obsDate|%{if($_){$_.Trim("'")}}
                     ObsDateMinus12hr=$obsDateMinus12hr

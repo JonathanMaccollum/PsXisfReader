@@ -1,5 +1,4 @@
-import-module $PSScriptRoot/PsXisfReader.psm1 -Force
-import-module $PSScriptRoot/pixinsightpreprocessing.psm1 -Force
+import-module $PSScriptRoot/PsXisfReader.psd1 -Force
 $ErrorActionPreference="STOP"
 
 $DropoffLocation = "D:\Backups\Camera\Dropoff\NINA"
@@ -101,7 +100,7 @@ Get-ChildItem $DropoffLocation *.xisf |
                 foreach-object {
                     $filter = $_.Group[0].Filter
                     $focalLength=$_.Group[0].FocalLength
-                    $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20200508.MasterFlatCal.$filter.xisf"
+                    $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20200626.MasterFlatCal.$filter.xisf"
 
                     if(-not (test-path $masterFlat)) {
                         Write-Warning "Skipping $($_.Group.Count) frames at ($focalLength)mm with filter $filter. Reason: No master flat was found."

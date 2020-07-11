@@ -25,6 +25,35 @@ Function Get-PixInsightInstance([int]$PixInsightSlot)
     }
     $x
 }
+Function Start-PixInsight
+{
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory=$true)][int]$PixInsightSlot
+    )
+
+    Push-Location "C:\Program Files\PixInsight\bin"
+    try
+    {
+        $arguments = @(
+            "--no-startup-scripts"
+            "--no-startup-check-updates",
+            "--no-startup-gui-messages",
+            "--no-splash -n=$PixInsightSlot"
+        );
+        Start-Process ".\pixinsight.exe" -PassThru -ArgumentList $arguments >> $null
+        while(-not (Get-PixInsightInstance -PixInsightSlot $PixInsightSlot))
+        {
+            Write-Verbose "Waiting for PixInsight to start slot $PixInsightSlot"
+            Wait-Event -Timeout 4            
+        }
+    }
+    finally
+    {
+        Pop-Location
+    }
+}
+
 Function Invoke-PixInsightScript
 {
     [CmdletBinding()]
@@ -535,7 +564,7 @@ Function Invoke-DarkFrameSorting
     foreach-object {
         $images=$_.Group
         $instrument=$images[0].Instrument.Trim().Trim("'")
-        $exposure=$images[0].Exposure.Trim()
+        $exposure=$images[0].Exposure.ToString().Trim()
         $setTemp=($images[0].SetTemp)
         $gain=($images[0].Gain)
         $offset=($images[0].Offset)
@@ -576,7 +605,7 @@ Function Invoke-DarkFlatFrameSorting
     foreach-object {
         $images=$_.Group
         $filter=$images[0].Filter.Trim()
-        $focalLength=($images[0].FocalLength).TrimEnd('mm')+'mm'
+        $focalLength=($images[0].FocalLength.ToString().TrimEnd('mm'))+'mm'
         $flatDate = ([DateTime]$images[0].LocalDate).Date.ToString('yyyyMMdd')
         $targetDirectory = "$ArchiveDirectory\$focalLength\Flats"
         $masterDark = "$targetDirectory\$($flatDate).MasterDarkFlat.$($filter).xisf"
@@ -632,7 +661,7 @@ Function Invoke-FlatFrameSorting
     foreach-object {
         $flats=$_.Group
         $filter=$flats[0].Filter.Trim()
-        $focalLength=($flats[0].FocalLength).TrimEnd('mm')+'mm'
+        $focalLength=($flats[0].FocalLength.ToString().TrimEnd('mm'))+'mm'
         $flatDate = ([DateTime]$flats[0].LocalDate).Date.ToString('yyyyMMdd')
 
         Write-Host "Processing $($flats.Count) Flats for filter '$filter' at $focalLength"
@@ -882,7 +911,10 @@ Function Invoke-PiStarAlignment
         [Parameter(Mandatory=$true)][System.IO.FileInfo]$ReferencePath,
         [Parameter(Mandatory=$true)][System.IO.DirectoryInfo]$OutputPath,
         [Parameter(Mandatory=$false)][Switch]$KeepOpen,
-        [Parameter(Mandatory=$false)][int]$DetectionScales=5
+        [Parameter(Mandatory=$false)][int]$DetectionScales=5,
+        
+        [ValidateSet("Auto","Bilinear","CubicBSplineFilter","MitchellNetravaliFilter","CatmullRomSplineFilter")]
+        [Parameter(Mandatory=$false)][String]$Interpolation="Auto"
     )
     $piReferencePath = Get-Item $ReferencePath | Format-PiPath
     $outputDirectory = Get-Item ($OutputPath.FullName) | Format-PiPath
@@ -948,7 +980,7 @@ P.noGUIMessages = true;
 P.useSurfaceSplines = false;
 P.extrapolateLocalDistortion = true;
 P.splineSmoothness = 0.250;
-P.pixelInterpolation = StarAlignment.prototype.Auto;
+P.pixelInterpolation = StarAlignment.prototype.$($Interpolation);
 P.clampingThreshold = 0.30;
 P.outputDirectory = `"S:/PixInsight/Aligned`";
 P.outputExtension = `".xisf`";
