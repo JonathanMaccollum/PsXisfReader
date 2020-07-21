@@ -2,31 +2,26 @@ import-module $PSScriptRoot/PsXisfReader.psd1 -Force
 $ErrorActionPreference="STOP"
 
 
-$target="E:\Astrophotography\1000mm\DWB111"
-#$alignmentReference="Sadr.Ha.39x300s.Ha.25x600s.xisf"
-#$alignmentReference="Sadr_P0.Ha.34x300s.xisf"
-#$alignmentReference = "DWB111_P0.Ha.1x300s.Ha.15x600s.xisf"
-#$alignmentReference = "DWB111.Ha.1x300s.Ha.25x600s.Oiii.37x600s.xisf"
-#$alignmentReference = "sh2-73.L.17x60s.xisf"
-$alignmentReference = "DWB111.Ha.16x600s.Int2.xisf"
-#$alignmentReference = "Sadr.Ha.6x300s.Ha.29x600s.xisf"
-#$alignmentReference = "Sh 2-108 P2.Ha.50x300s.Ha.4x600s.xisf"
-#$alignmentReference = "Sh 2-108 P1.Ha.53x300s.Ha.8x600s.xisf"
+$target="E:\Astrophotography\1000mm\vdB131 vdB132 Panel2"
+#$alignmentReference = "DWB111.Ha.16x600s.Int2.xisf"
+$alignmentReference="Sh 2-108.L3.70x120s.xisf"
+$alignmentReference="Eye of Smaug in Cygnus.L3.167x120s.xisf"
 
 $CalibrationPath = "E:\PixInsightLT\Calibrated"
 $CorrectedOutputPath = "S:\PixInsight\Corrected"
 $WeightedOutputPath = "S:\PixInsight\Weighted"
+$DebayeredOutputPath = "S:\PixInsight\Debayered"
 $AlignedOutputPath = "S:\PixInsight\Aligned"
 $BackupCalibrationPaths = @("T:\PixInsightLT\Calibrated","N:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated")
-$RerunWeighting=$true
-$RerunAlignment=$true
+$RerunWeighting=$false
+$RerunAlignment=$false
 Clear-Host
 
 $data =
     Get-XisfLightFrames -Path $target -Recurse |
     Where-Object {-not $_.HasTokensInPath(@("reject","process","testing","clouds","draft","cloudy"))} |
     Where-Object {-not $_.IsIntegratedFile()} |
-    Where-Object Filter -ne "Ha" |
+    Where-Object Filter -eq "L3" |
     Get-XisfCalibrationState `
         -CalibratedPath $CalibrationPath `
         -AdditionalSearchPaths $BackupCalibrationPaths `
@@ -79,6 +74,26 @@ $data =
                     -CosmeticCorrectionPath $CorrectedOutputPath
         }
     } |
+    Get-XisfDebayerState -DebayerPath $DebayeredOutputPath |
+    Group-Object {$_.IsDebayered()} |
+    ForEach-Object {
+        $group=$_.Group
+        if( $group[0].IsDebayered() ){
+            $group
+        }
+        else {
+            Write-Host "Debayering $($group.Count) Images"
+            Invoke-PiDebayer `
+                -PixInsightSlot 200 `
+                -Images ($group.Corrected) `
+                -OutputPath $DebayeredOutputPath `
+                -CfaPattern "RGGB"
+
+            $group |
+                Get-XisfDebayerState `
+                    -DebayerPath $DebayeredOutputPath
+        }
+    } |
     Get-XisfSubframeSelectorState -SubframeSelectorPath $WeightedOutputPath |
     foreach-object {
         $x = $_
@@ -102,7 +117,7 @@ $data =
                 Start-PiSubframeSelectorWeighting `
                     -PixInsightSlot 200 `
                     -OutputPath $WeightedOutputPath `
-                    -Images ($byFilter.Corrected) `
+                    -Images ($byFilter.Debayered) `
                     -ApprovalExpression "Median<50 && FWHM<4.5" `
                     -WeightingExpression "(15*(1-(FWHM-FWHMMin)/(FWHMMax-FWHMMin))
                     +  5*(1-(Eccentricity-EccentricityMin)/(EccentricityMax-EccentricityMin))
