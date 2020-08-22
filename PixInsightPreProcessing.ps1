@@ -639,10 +639,11 @@ Function Get-XisfLightFrames{
     [CmdletBinding()]
     param (
         [Parameter(Mandatory)][System.IO.DirectoryInfo]$Path,
-        [Parameter()][Switch]$Recurse
+        [Parameter()][Switch]$Recurse,
+        [Parameter()][HashTable]$Cache
     )
     Get-ChildItem -Path $Path -File -Filter *.xisf -Recurse:$Recurse |
-        Get-XisfFitsStats |
+        Get-XisfFitsStats -Cache:$Cache |
         where-object ImageType -eq "LIGHT"
 }
 Function Invoke-FlatFrameSorting

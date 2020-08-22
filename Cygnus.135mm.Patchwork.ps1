@@ -12,7 +12,7 @@ Clear-Host
 
 $data =
     Get-XisfLightFrames -Path $target -Recurse |
-    Where-Object {-not $_.HasTokensInPath(@("reject","process","testing","clouds","draft"))} |
+    Where-Object {-not $_.HasTokensInPath(@("reject","process","testing","clouds","draft","cloudy"))} |
     Where-Object {-not $_.IsIntegratedFile()} |
     Get-XisfCalibrationState `
         -CalibratedPath $CalibrationPath `

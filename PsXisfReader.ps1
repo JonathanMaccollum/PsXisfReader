@@ -78,7 +78,28 @@ Function Get-XisfFitsStats
     process{            
         if($Cache -and $Cache.ContainsKey($Path.FullName))
         {
-            Write-Output ($Cache[$Path.FullName])
+            $result = $Cache[$Path.FullName]
+            
+            Write-Output ([XisfFileStats]@{
+                Exposure=$result.Exposure
+                Filter=$result.Filter
+                Instrument=$result.Instrument
+                Object=$result.Object
+                Gain=$result.Gain
+                Offset=$result.Offset
+                ImageType=$result.ImageType
+                CCDTemp=$result.CCDTemp
+                SetTemp=$result.SetTemp
+                FocalLength=$result.FocalLength
+                FocalRatio=$result.FocalRatio
+                ObsDate=$result.ObsDate
+                ObsDateMinus12hr=$result.ObsDateMinus12hr
+                LocalDate=$result.LocalDate
+                SSWeight=$result.SSWeight
+                Pedestal=$result.Pedestal
+                History=$result.History
+                Path=$Path
+            })
         }
         else
         {
