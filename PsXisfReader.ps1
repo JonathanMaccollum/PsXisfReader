@@ -151,6 +151,11 @@ Function Get-XisfFitsStats
                 Write-Warning ("An error occured reading the file "+($Path.FullName))
                 Write-Verbose $_.Exception.ToString()
             }
+            catch {
+                Write-Warning "An unexpected error occured processing file $($Path.FullName)"
+                Write-Warning $_.Exception.ToString()
+                throw
+            }
             finally
             {
                 $reader.Dispose()

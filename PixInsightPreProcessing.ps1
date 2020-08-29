@@ -214,7 +214,7 @@ Function Invoke-PiDarkIntegration
     P.useCache = true;
     P.evaluateNoise = false;
     P.mrsMinDataFraction = 0.010;
-    P.subtractPedestals = true;
+    P.subtractPedestals = false;
     P.truncateOnOutOfRange = false;
     P.noGUIMessages = true;
     P.useFileThreads = true;
@@ -282,7 +282,7 @@ Function Invoke-PiFlatIntegration
     P.useCache = true;
     P.evaluateNoise = false;
     P.mrsMinDataFraction = 0.010;
-    P.subtractPedestals = true;
+    P.subtractPedestals = false;
     P.truncateOnOutOfRange = false;
     P.noGUIMessages = true;
     P.useFileThreads = true;
@@ -640,11 +640,46 @@ Function Get-XisfLightFrames{
     param (
         [Parameter(Mandatory)][System.IO.DirectoryInfo]$Path,
         [Parameter()][Switch]$Recurse,
-        [Parameter()][HashTable]$Cache
+        [Parameter()][Switch]$UseCache,
+        [Parameter()][Switch]$SkipOnError
     )
-    Get-ChildItem -Path $Path -File -Filter *.xisf -Recurse:$Recurse |
-        Get-XisfFitsStats -Cache:$Cache |
-        where-object ImageType -eq "LIGHT"
+    begin
+    {        
+        if($UseCache.IsPresent){
+            $PathToCache= Join-Path ($Path.FullName) "Cache.clixml"
+            if(Test-Path $PathToCache){
+                $cache = Import-Clixml -Path $PathToCache
+            }
+            else {
+                $cache = new-object hashtable
+            }
+            $entriesBefore=$cache.Count    
+        }
+    }
+    process
+    {
+        Get-ChildItem -Path $Path -File -Filter *.xisf |
+        foreach-object {
+            $file=$_
+            try{
+                $file|Get-XisfFitsStats -Cache:$cache |where-object ImageType -eq "LIGHT"
+            }
+            catch{
+                if(-not ($SkipOnError.IsPresent)){
+                    throw;
+                }
+            }
+        }
+        if($UseCache -and ($cache.Count) -ne $entriesBefore){
+            $cache|Export-Clixml -Path $PathToCache -Force
+        }
+        if($Recurse.IsPresent)
+        {
+            Get-ChildItem -Path $Path -Directory | ForEach-Object {
+                Get-XisfLightFrames -Recurse -Path $_ -UseCache:$UseCache -SkipOnError:$SkipOnError
+            }
+        }
+    }
 }
 Function Invoke-FlatFrameSorting
 {
@@ -1084,6 +1119,8 @@ Function Invoke-PiLightIntegration
         [Parameter(Mandatory=$false)][decimal]$LinearFitLow=8,
         [Parameter(Mandatory=$false)][decimal]$LinearFitHigh=7,
         [Parameter(Mandatory=$false)][string]$Rejection = "LinearFit",
+        [Parameter(Mandatory=$false)][string]$Normalization = "AdditiveWithScaling", #AdaptiveNormalization
+        [Parameter(Mandatory=$false)][string]$RejectionNormalization = "Scale", #AdaptiveRejectionNormalization
         [Parameter(Mandatory=$false)][Switch]$GenerateDrizzleData
     )
     $ImageDefinition = [string]::Join("`r`n   , ",
@@ -1100,9 +1137,9 @@ Function Invoke-PiLightIntegration
     P.weightKeyword = ""SSWEIGHT"";
     P.weightScale = ImageIntegration.prototype.WeightScale_IKSS;
     P.ignoreNoiseKeywords = false;
-    P.normalization = ImageIntegration.prototype.AdditiveWithScaling;
+    P.normalization = ImageIntegration.prototype.$Normalization;
     P.rejection = ImageIntegration.prototype.$Rejection;
-    P.rejectionNormalization = ImageIntegration.prototype.Scale;
+    P.rejectionNormalization = ImageIntegration.prototype.$RejectionNormalization;
     P.minMaxLow = 1;
     P.minMaxHigh = 1;
     P.pcClipLow = 0.200;
@@ -1148,7 +1185,7 @@ Function Invoke-PiLightIntegration
     P.useCache = true;
     P.evaluateNoise = true;
     P.mrsMinDataFraction = 0.010;
-    P.subtractPedestals = true;
+    P.subtractPedestals = false;
     P.truncateOnOutOfRange = false;
     P.noGUIMessages = true;
     P.useFileThreads = true;
@@ -1278,6 +1315,7 @@ function  Get-XisfCalibrationState {
                 -Calibrated $calibrated
         }
 
+        Write-Verbose "Searching sub folders for calibrated file $($calibratedFileName)"
         #try to find a file in any subfolder
         $calibrated = 
             Get-ChildItem $CalibratedPath -Recurse:$Recurse -Filter $calibratedFileName |
