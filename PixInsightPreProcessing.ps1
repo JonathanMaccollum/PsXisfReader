@@ -688,7 +688,8 @@ Function Invoke-FlatFrameSorting
         [System.IO.DirectoryInfo]$DropoffLocation,
         [System.IO.DirectoryInfo]$ArchiveDirectory,
         [System.IO.DirectoryInfo]$CalibratedFlatsOutput,
-        [int]$PixInsightSlot
+        [int]$PixInsightSlot,
+        [Switch]$KeepOpen
     )
     Get-ChildItem $DropoffLocation "*.xisf" |
     foreach-object { Get-XisfFitsStats -Path $_ } |
@@ -718,14 +719,16 @@ Function Invoke-FlatFrameSorting
                         -Images $toCalibrate `
                         -MasterDark $masterDark `
                         -OutputPath $CalibratedFlatsOutput `
-                        -PixInsightSlot $PixInsightSlot
+                        -PixInsightSlot $PixInsightSlot `
+                        -KeepOpen:$KeepOpen
                 }
                 $calibratedFlats = $flats|foreach-object {Get-Item $_.CalibratedFlat}
                 if($flats) {
                     Invoke-PiFlatIntegration `
                         -Images $calibratedFlats `
                         -PixInsightSlot $PixInsightSlot `
-                        -OutputFile $masterCalibratedFlat
+                        -OutputFile $masterCalibratedFlat `
+                        -KeepOpen:$KeepOpen
                 }
             }
         }
@@ -736,7 +739,8 @@ Function Invoke-FlatFrameSorting
             Invoke-PiFlatIntegration `
                 -Images $toIntegrate `
                 -PixInsightSlot $PixInsightSlot `
-                -OutputFile $masterNoCalFlat
+                -OutputFile $masterNoCalFlat `
+                -KeepOpen:$KeepOpen
         }
         $destinationDirectory=join-path $targetDirectory $flatDate
         [System.IO.Directory]::CreateDirectory($destinationDirectory)>>$null
@@ -948,8 +952,9 @@ Function Invoke-PiStarAlignment
         [Parameter(Mandatory=$true)][System.IO.DirectoryInfo]$OutputPath,
         [Parameter(Mandatory=$false)][Switch]$KeepOpen,
         [Parameter(Mandatory=$false)][int]$DetectionScales=5,
+        [Parameter(Mandatory=$false)][decimal]$ClampingThreshold=0.3,
         
-        [ValidateSet("Auto","Bilinear","CubicBSplineFilter","MitchellNetravaliFilter","CatmullRomSplineFilter")]
+        [ValidateSet("Auto","Lanczos3","Lanczos4","Bilinear","CubicBSplineFilter","MitchellNetravaliFilter","CatmullRomSplineFilter")]
         [Parameter(Mandatory=$false)][String]$Interpolation="Auto"
     )
     $piReferencePath = Get-Item $ReferencePath | Format-PiPath
@@ -1017,7 +1022,7 @@ P.useSurfaceSplines = false;
 P.extrapolateLocalDistortion = true;
 P.splineSmoothness = 0.250;
 P.pixelInterpolation = StarAlignment.prototype.$($Interpolation);
-P.clampingThreshold = 0.30;
+P.clampingThreshold = $ClampingThreshold;
 P.outputDirectory = `"S:/PixInsight/Aligned`";
 P.outputExtension = `".xisf`";
 P.outputPrefix = `"`";
@@ -1156,7 +1161,7 @@ Function Invoke-PiLightIntegration
     P.ccdScaleNoise = 0.00;
     P.clipLow = true;
     P.clipHigh = true;
-    P.rangeClipLow = false;
+    P.rangeClipLow = true;
     P.rangeLow = 0.000000;
     P.rangeClipHigh = false;
     P.rangeHigh = 0.980000;
