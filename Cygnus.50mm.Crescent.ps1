@@ -1,27 +1,34 @@
 import-module $PSScriptRoot/PsXisfReader.psd1 -Force
 $ErrorActionPreference="STOP"
 
-$target="E:\Astrophotography\50mm\PatchworkCygnus_2_3"
+$target="E:\Astrophotography\50mm\PatchworkCygnus_1_1"
 $CalibrationPath = "E:\PixInsightLT\Calibrated"
 $CorrectedOutputPath = "S:\PixInsight\Corrected"
 $WeightedOutputPath = "S:\PixInsight\Weighted"
 $AlignedOutputPath = "S:\PixInsight\Aligned"
 $BackupCalibrationPaths = @("T:\PixInsightLT\Calibrated","N:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated")
-$RerunWeighting=$false
-$RerunAlignment=$false
-#$alignmentReference = "PatchworkCygnus_1_2.119x240s.8x600s.xisf"
-#$alignmentReference="PatchworkCygnus_1_2.BHS_Ha.40x240s.Ha.6x240s.BHS_Ha.11x600s.Ha.8x600s.xisf"
+$RerunWeighting=$true
+$RerunAlignment=$true
+$CreateSuperLuminance=$true
+$alignmentReference=$null
+#$alignmentReference="PatchworkCygnus_0_3.BHS_Ha.11x240s.BHS_Ha.6x300s.BHS_Ha.5x600s.xisf"
+#$alignmentReference="PatchworkCygnus_0_4.BHS_Ha.36x300s.Adaptive.xisf"
 #$alignmentReference="PatchworkCygnus_1_1.BHS_Ha.15x600s.Ha.17x600s.Ha.21x240s.xisf"
-#$alignmentReference="PatchworkCygnus_2_2.BHS_Ha.15x600s.xisf"
-$alignmentReference="PatchworkCygnus_0_3.BHS_Ha.11x240s.BHS_Ha.6x300s.BHS_Ha.5x600s.xisf"
-#$alignmentReference = "PatchworkCygnus_2_1.BHS_Ha.11x600s.xisf"
+#$alignmentReference="PatchworkCygnus_1_2.BHS_Ha.40x240s.Ha.6x240s.BHS_Ha.11x600s.Ha.8x600s.xisf"
+#$alignmentReference="PatchworkCygnus_1_3.BHS_Ha.14x600s.xisf"
+#$alignmentReference="PatchworkCygnus_1_4.BHS_Ha.8x300s.Adaptive.BHS_Ha.26x360s.Adaptive.BHS_Ha.19x600s.Adaptive.xisf"
 #$alignmentReference="PatchworkCygnus_2_0.BHS_Ha.23x600s.xisf"
+#$alignmentReference="PatchworkCygnus_2_1.BHS_Ha.22x360s.Adaptive.BHS_Ha.15x600s.Adaptive.xisf"
+#$alignmentReference="PatchworkCygnus_2_2.BHS_Ha.15x600s.xisf"
+#$alignmentReference="PatchworkCygnus_2_4.BHS_Ha.10x300s.BHS_Ha.2x360s.Adaptive.xisf"
+#$alignmentReference="Ceph50mm.BHS_Ha.4x300s.BHS_Ha.4x360s.BHS_Ha.42x600s.Adaptive.ESD.xisf"
 Clear-Host
 $data =
     Get-XisfLightFrames -Path $target -Recurse |
     Where-Object {-not $_.HasTokensInPath(@("reject","process","testing","clouds","draft","cloudy"))} |
+    Where-Object Filter -eq BHS_Oiii |
+    #Where-Object Filter -ne BHS_Sii |
     Where-Object {-not $_.IsIntegratedFile()} |
-    Where-Object {$_.Filter.EndsWith("OIII")} |
     Get-XisfCalibrationState `
         -CalibratedPath $CalibrationPath `
         -AdditionalSearchPaths $BackupCalibrationPaths `
@@ -98,12 +105,12 @@ $data =
                     -PixInsightSlot 200 `
                     -OutputPath $WeightedOutputPath `
                     -Images ($byFilter.Corrected) `
-                    -ApprovalExpression "Median<50 && FWHM<4.5" `
+                    -ApprovalExpression "Median<100 && FWHM<4.5" `
                     -WeightingExpression "(15*(1-(FWHM-FWHMMin)/(FWHMMax-FWHMMin))
                     +  5*(1-(Eccentricity-EccentricityMin)/(EccentricityMax-EccentricityMin))
-                    + 15*(SNRWeight-SNRWeightMin)/(SNRWeightMax-SNRWeightMin)
-                    + 30*(1-(Median-MedianMin)/(MedianMax-MedianMin))
-                    + 20*(Stars-StarsMin)/(StarsMax-StarsMin))
+                    + 05*(SNRWeight-SNRWeightMin)/(SNRWeightMax-SNRWeightMin)
+                    + 20*(1-(Median-MedianMin)/(MedianMax-MedianMin))
+                    + 40*(Stars-StarsMin)/(StarsMax-StarsMin))
                     + 20"
         
             }
@@ -149,7 +156,8 @@ $data =
                     -Images ($approved.Path) `
                     -ReferencePath ($reference) `
                     -OutputPath $AlignedOutputPath `
-                    -Interpolation MitchellNetravaliFilter
+                    -Interpolation Lanczos4 `
+                    -ClampingThreshold 0.2
                 $group |
                     Get-XisfAlignedState `
                         -AlignedPath $AlignedOutputPath
@@ -174,9 +182,11 @@ $data =
                 $filter=$_.Group[0].Filter;
                 $outputFileName+=".$filter.$($_.Group.Count)x$($exposure)s"
             }
-            $outputFileName+=".xisf"
+            $outputFileName+=".Adaptive.xisf"
             $outputFile = Join-Path $target $outputFileName
-            if(-not (test-path $outputFile)) {
+
+
+            if((-not (test-path $outputFile)) -and $CreateSuperLuminance) {
                 write-host ("Creating super luminance "+ $outputFileName)
                 $toStack = $approved | sort-object SSWeight -Descending
                 Invoke-PiLightIntegration `
@@ -184,6 +194,10 @@ $data =
                     -OutputFile $outputFile `
                     -KeepOpen `
                     -GenerateDrizzleData `
+                    -Normalization "AdaptiveNormalization" `
+                    -RejectionNormalization "AdaptiveRejectionNormalization" `
+                    -LinearFitLow 5 `
+                    -LinearFitHigh 4 `
                     -PixInsightSlot 200
             }
 
@@ -198,7 +212,7 @@ $data =
                     $exposure=$_.Group[0].Exposure;
                     $outputFileName+=".$filter.$($_.Group.Count)x$($exposure)s"
                 }
-                $outputFileName+=".xisf"
+                $outputFileName+=".Adaptive.xisf"
                 $outputFile = Join-Path $target $outputFileName
                 if(-not (test-path $outputFile)) {
                     write-host ("Integrating  "+ $outputFileName)
@@ -208,6 +222,10 @@ $data =
                         -Images ($toStack|foreach-object {$_.Path}) `
                         -OutputFile $outputFile `
                         -KeepOpen `
+                        -Normalization "AdaptiveNormalization" `
+                        -RejectionNormalization "AdaptiveRejectionNormalization" `
+                        -LinearFitLow 5 `
+                        -LinearFitHigh 4 `
                         -PixInsightSlot 200
                     }
                     catch {
@@ -229,3 +247,5 @@ $mostRecent=
     Select-Object -first 1
 
 $data | Export-Clixml -Path (Join-Path $target "Stats.$($mostRecent.LocalDate.ToString('yyyyMMdd HHmmss')).clixml")
+
+
