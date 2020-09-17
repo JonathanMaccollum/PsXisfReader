@@ -27,7 +27,7 @@ $stats=$data|
         $count=$_.Count
         $filter=$x[0].Filter
         $exposure=$x[0].Exposure
-        $totalExposure=$x|Measure-ExposureTime
+        $totalExposure=$x|Measure-ExposureTime -TotalSeconds
         new-object psobject -Property @{
             FocalLength=$x[0].FocalLength
             Object=$x[0].Object
@@ -36,7 +36,7 @@ $stats=$data|
             Count=$count
             Exposures=$x
             Summary="$($count)x$($exposure)s"
-            TotalExposure=$totalExposure
+            TotalExposure=$totalExposure.Total
             TotalExposureS=$totalExposure.TotalSeconds
         }
     } |
@@ -52,13 +52,13 @@ $stats=$data|
             $subs = $x | where-object Filter -eq $filter | foreach-object {$_.Exposures} | sort-object ObsDate
             Add-Member -MemberType NoteProperty -InputObject $r -Value $subs  -Name "All $filter"
 
-            $total = $subs|Measure-ExposureTime
-            $first = ($subs | Select-Object -First 1).ObsDate
-            $last = ($subs | Select-Object -Last 1).ObsDate
-            if($total -eq [TimeSpan]::Zero) {
+            $total = $subs|Measure-ExposureTime -First -Last
+            $first = $total.First.ObsDate
+            $last = $total.Last.ObsDate
+            if($total.Total -eq [TimeSpan]::Zero) {
                 $total = $null
             }
-            Add-Member -MemberType NoteProperty -InputObject $r -Value $total -Name "Total $filter"
+            Add-Member -MemberType NoteProperty -InputObject $r -Value $total.Total -Name "Total $filter"
             Add-Member -MemberType NoteProperty -InputObject $r -Value $first -Name "First $filter"
             Add-Member -MemberType NoteProperty -InputObject $r -Value $last  -Name "Last $filter"
         }

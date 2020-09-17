@@ -98,7 +98,7 @@ Get-DateRange -StartDate $minDate -EndDate $maxDate |
 
         new-object psobject -Property @{
             Date=$date.ToString("yyyy-MM-dd")
-            ExposureTime=($x.Group|Measure-ExposureTime).TotalMinutes
+            ExposureTime=($x.Group|Measure-ExposureTime -TotalMinutes).TotalMinutes
         }    
     }
 

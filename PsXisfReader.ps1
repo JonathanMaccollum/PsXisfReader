@@ -174,15 +174,52 @@ Function Get-XisfFitsStats
 Function Measure-ExposureTime
 {
     param(
-        [Parameter(ValueFromPipeline=$true)][XisfFileStats[]]$Input
+        [Parameter(ValueFromPipeline=$true)][XisfFileStats[]]$Input,
+        [Parameter()][Switch]$TotalSeconds,
+        [Parameter()][Switch]$TotalMinutes,
+        [Parameter()][Switch]$TotalHours,
+        [Parameter()][Switch]$TotalDays,
+        [Parameter()][Switch]$First,
+        [Parameter()][Switch]$Last
     )
     begin {
-        $totalSeconds=0.0;
+        $earliest=$null
+        $latest=$null
+        $seconds=0.0
+        $result=new-object psobject -Property @{
+            Count=0
+        }
     }
     process{
-        $totalSeconds+=$Input.Exposure
+        if($null -eq $earliest -or $earliest.ObsDate -gt $Input.ObsDate){
+            $earliest=$Input
+        }
+        if($null -eq $latest -or $earliest.ObsDate -lt $Input.ObsDate){
+            $latest=$Input
+        }
+        $seconds+=$Input.Exposure
+        $result.Count+=1
     }
     end {
-        [TimeSpan]::FromSeconds($totalSeconds)
+        $total = [TimeSpan]::FromSeconds($seconds)
+        if($TotalSeconds){
+            add-member -MemberType NoteProperty -InputObject $result -Name "TotalSeconds" -value $total.TotalSeconds
+        }
+        if($TotalMinutes){
+            add-member -MemberType NoteProperty -InputObject $result -Name "TotalMinutes" -value $total.TotalMinutes
+        }
+        if($TotalHours){
+            add-member -MemberType NoteProperty -InputObject $result -Name "TotalHours" -value $total.TotalHours
+        }
+        if($TotalDays){
+            add-member -MemberType NoteProperty -InputObject $result -Name "TotalDays" -value $total.TotalDays
+        }
+        if($First){
+            add-member -MemberType NoteProperty -InputObject $result -Name "First" -value $earliest
+        }
+        if($Last){
+            add-member -MemberType NoteProperty -InputObject $result -Name "Last" -value $latest
+        }
+        add-member -MemberType NoteProperty -InputObject $result -PassThru -Name "Total" -Value $total
     }
 }
