@@ -9,7 +9,7 @@
     if($x) {
         Add-Member -MemberType NoteProperty -Name "PixInsightSlot" -Value $PixInsightSlot -InputObject $x
         while(-not $x.WaitForExit(1000)){
-            Write-Verbose "Waiting for PixInsighth slot $PixInsightSlot to exit."
+            Write-Verbose "Waiting for PixInsight slot $PixInsightSlot to exit."
         }
     }
     $x
@@ -1123,7 +1123,7 @@ Function Invoke-PiLightIntegration
         [Parameter(Mandatory=$false)][Switch]$KeepOpen,
         [Parameter(Mandatory=$false)][decimal]$LinearFitLow=8,
         [Parameter(Mandatory=$false)][decimal]$LinearFitHigh=7,
-        [Parameter(Mandatory=$false)][string]$Rejection = "LinearFit",
+        [Parameter(Mandatory=$false)][string]$Rejection = "LinearFit", #Rejection_ESD
         [Parameter(Mandatory=$false)][string]$Normalization = "AdditiveWithScaling", #AdaptiveNormalization
         [Parameter(Mandatory=$false)][string]$RejectionNormalization = "Scale", #AdaptiveRejectionNormalization
         [Parameter(Mandatory=$false)][Switch]$GenerateDrizzleData

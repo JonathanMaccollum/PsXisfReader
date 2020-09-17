@@ -23,35 +23,44 @@ $filters = $data|Group-Object Filter|ForEach-Object{$_.Name}
 $stats=$data|
     Group-Object FocalLength,Object,Filter,Exposure |
     ForEach-Object {
-        $x=$_.Group
+        $x = $_.Group
         $count=$_.Count
-        $r=new-object psobject -Property @{
+        $filter=$x[0].Filter
+        $exposure=$x[0].Exposure
+        $totalExposure=$x|Measure-ExposureTime
+        new-object psobject -Property @{
             FocalLength=$x[0].FocalLength
             Object=$x[0].Object
-            Filter=$x[0].Filter
+            Filter=$filter
             Exposure=$x[0].Exposure
             Count=$count
+            Exposures=$x
+            Summary="$($count)x$($exposure)s"
+            TotalExposure=$totalExposure
+            TotalExposureS=$totalExposure.TotalSeconds
         }
-        Add-Member -InputObject $r -Value "$($count)x$($r.Exposure)s" -MemberType NoteProperty -Name "Summary"
-        Add-Member -InputObject $r -Value ([TimeSpan]::FromSeconds($($count)*$($r.Exposure))) -MemberType NoteProperty -Name "TotalExposure"
-        Add-Member -InputObject $r -Value ($($count)*$($r.Exposure)) -MemberType NoteProperty -Name "TotalExposureS"
-        $r | Write-Output
     } |
     Group-Object FocalLength,Object |
     Foreach-Object {
-        $x=$_.Group
+        $x = $_.Group
         $r = new-object psobject -Property @{
             Object = $x[0].Object
             FocalLength=$x[0].FocalLength
         }
         $filters|foreach-object {
             $filter = $_
-            $subs = $x | where-object Filter -eq $_
-            $total = [TimeSpan]::FromSeconds(($subs | Measure-Object -Property TotalExposureS -Sum).Sum)
+            $subs = $x | where-object Filter -eq $filter | foreach-object {$_.Exposures} | sort-object ObsDate
+            Add-Member -MemberType NoteProperty -InputObject $r -Value $subs  -Name "All $filter"
+
+            $total = $subs|Measure-ExposureTime
+            $first = ($subs | Select-Object -First 1).ObsDate
+            $last = ($subs | Select-Object -Last 1).ObsDate
             if($total -eq [TimeSpan]::Zero) {
                 $total = $null
             }
-            Add-Member -InputObject $r -Value $total -MemberType NoteProperty -Name "Total $filter"
+            Add-Member -MemberType NoteProperty -InputObject $r -Value $total -Name "Total $filter"
+            Add-Member -MemberType NoteProperty -InputObject $r -Value $first -Name "First $filter"
+            Add-Member -MemberType NoteProperty -InputObject $r -Value $last  -Name "Last $filter"
         }
         $r | Write-Output
     } |
@@ -81,7 +90,8 @@ $stats=$data|
         $x
     }
 
-$stats|    Format-Table Object,FocalLength,"Combined Ha","Combined Oiii","Combined Sii","Total L3","Total L","Total R","Total G","Total B","Total Combined"
+$stats|    Format-Table Object,FocalLength,"Combined Ha","Combined Oiii","Combined Sii","Total Ha","Total Oiii","Total Sii","Total L3","Total L","Total R","Total G","Total B","Total Combined"
+$stats|    Format-Table Object,FocalLength,"Last BHS_Ha","Last Ha","Last BHS_Oiii","Last Oiii","Last Sii","Last L3","Last L","Last R","Last G","Last B","Total Combined"
 
 $minDate=($data|Measure-Object ObsDateMinus12hr -Minimum).Minimum
 $maxDate=($data|Measure-Object ObsDateMinus12hr -Maximum).Maximum
