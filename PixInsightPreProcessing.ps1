@@ -371,13 +371,21 @@ Function Invoke-PiLightCalibration
         [Parameter(Mandatory=$true)][int]$PixInsightSlot,
         [Parameter(Mandatory=$true)][System.IO.FileInfo[]]$Images,
         [Parameter(Mandatory=$true)][System.IO.FileInfo]$MasterDark,
-        [Parameter(Mandatory=$true)][System.IO.FileInfo]$MasterFlat,
+        [Parameter(Mandatory=$false)][System.IO.FileInfo]$MasterFlat,
         [Parameter(Mandatory=$true)][System.IO.DirectoryInfo]$OutputPath,
         [Parameter(Mandatory=$false)][Switch]$KeepOpen,
         [Parameter()][int]$OutputPedestal=0
     )
     $masterDarkPath = Get-Item $MasterDark | Format-PiPath
-    $masterFlatPath = Get-Item $MasterFlat | Format-PiPath
+    if($MasterFlat){
+        $masterFlatPath = Get-Item $MasterFlat | Format-PiPath
+        $masterFlatEnabled = "true"
+    }
+    else{
+        $masterFlatPath=""
+        $masterFlatEnabled = "false"
+    }
+    
     $outputDirectory = Get-Item ($OutputPath.FullName) | Format-PiPath
     $ImageDefinition = [string]::Join("`r`n   , ",
     ($Images | ForEach-Object {
@@ -391,7 +399,7 @@ P.pedestalMode = ImageCalibration.prototype.Keyword;
 P.masterBiasEnabled = false;
 P.masterDarkEnabled = true;
 P.masterDarkPath = `"$masterDarkPath`";
-P.masterFlatEnabled = true;
+P.masterFlatEnabled = $masterFlatEnabled;
 P.masterFlatPath = `"$masterFlatPath`";
 P.calibrateBias = false;
 P.calibrateDark = false;
@@ -411,6 +419,7 @@ P.outputPedestal = $OutputPedestal;
 P.overwriteExistingFiles = false;
 P.onError = ImageCalibration.prototype.Abort;
 P.noGUIMessages = true;
+P.enableCFA = false;
     P.targetFrames= [`r`n     $ImageDefinition`r`n   ];
     P.launch();
     P.executeGlobal();"
