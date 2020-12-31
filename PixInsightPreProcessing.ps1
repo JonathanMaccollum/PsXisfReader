@@ -377,7 +377,7 @@ Function Invoke-PiLightCalibration
         [Parameter()][int]$OutputPedestal=0
     )
     $masterDarkPath = Get-Item $MasterDark | Format-PiPath
-    if($MasterFlat){
+    if(Test-Path $MasterFlat){
         $masterFlatPath = Get-Item $MasterFlat | Format-PiPath
         $masterFlatEnabled = "true"
     }
@@ -563,25 +563,31 @@ Function Invoke-DarkFrameSorting
         [System.IO.DirectoryInfo]$DropoffLocation,
         [System.IO.DirectoryInfo]$ArchiveDirectory,
         [int]$PixInsightSlot,
-        [Switch]$KeepOpen
+        [Switch]$KeepOpen,
+        [Switch]$DoNotArchive
     )
 
     Get-ChildItem $DropoffLocation "*.xisf" |
     foreach-object { Get-XisfFitsStats -Path $_ } |
     where-object ImageType -eq "DARK" |
-    group-object Instrument,Exposure,SetTemp,Gain,Offset |
+    group-object Instrument,Exposure,SetTemp,Gain,Offset,Geometry |
     foreach-object {
         $images=$_.Group
+        
         $instrument=$images[0].Instrument.Trim().Trim("'")
         $exposure=$images[0].Exposure.ToString().Trim()
         $setTemp=($images[0].SetTemp)
         $gain=($images[0].Gain)
         $offset=($images[0].Offset)
+        $geometry=($images[0].Geometry)
         $date = ([DateTime]$images[0].LocalDate).Date.ToString('yyyyMMdd')
         $targetDirectory = "$ArchiveDirectory\DarkLibrary\$instrument"
         [System.IO.Directory]::CreateDirectory($targetDirectory)>>$null
         $masterDark = "$targetDirectory\$($date).MasterDark.Gain.$($gain).Offset.$($offset).$($setTemp)C.$($images.Count)x$($exposure)s.xisf"
-        if(-not (Test-Path $masterDark)) {
+        if($images.Count -lt 10){
+            Write-Warning "Skipping $($images.Count) Darks for $instrument Gain $gain Offset $offset at $setTemp duration $($exposure)s: Need more than 10 subs for making a dark master."
+        }
+        elseif(-not (Test-Path $masterDark)) {
             Write-Host "Integrating $($images.Count) Darks for $instrument Gain $gain Offset $offset at $setTemp duration $($exposure)s"
             $darkFlats = $images | foreach-object {$_.Path}
             Invoke-PiDarkIntegration `
@@ -589,11 +595,14 @@ Function Invoke-DarkFrameSorting
                 -PixInsightSlot $PixInsightSlot `
                 -OutputFile $masterDark `
                 -KeepOpen:$KeepOpen
-        }
-        $destinationDirectory=join-path $targetDirectory $date
-        [System.IO.Directory]::CreateDirectory($destinationDirectory)>>$null
-        $images | Foreach-Object {
-            Move-Item -Path $_.Path -Destination $destinationDirectory
+                    
+            if(-not $DoNotArchive){
+                $destinationDirectory=join-path $targetDirectory $date
+                [System.IO.Directory]::CreateDirectory($destinationDirectory)>>$null
+                $images | Foreach-Object {
+                    Move-Item -Path $_.Path -Destination $destinationDirectory
+                }
+            }
         }
     }
 }
@@ -690,6 +699,52 @@ Function Get-XisfLightFrames{
         }
     }
 }
+Function Get-XisfDarkFrames{
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)][System.IO.DirectoryInfo]$Path,
+        [Parameter()][Switch]$Recurse,
+        [Parameter()][Switch]$UseCache,
+        [Parameter()][Switch]$SkipOnError
+    )
+    begin
+    {        
+        if($UseCache.IsPresent){
+            $PathToCache= Join-Path ($Path.FullName) "Cache.clixml"
+            if(Test-Path $PathToCache){
+                $cache = Import-Clixml -Path $PathToCache
+            }
+            else {
+                $cache = new-object hashtable
+            }
+            $entriesBefore=$cache.Count    
+        }
+    }
+    process
+    {
+        Get-ChildItem -Path $Path -File -Filter *.xisf |
+        foreach-object {
+            $file=$_
+            try{
+                $file|Get-XisfFitsStats -Cache:$cache |where-object ImageType -eq "DARK"
+            }
+            catch{
+                if(-not ($SkipOnError.IsPresent)){
+                    throw;
+                }
+            }
+        }
+        if($UseCache -and ($cache.Count) -ne $entriesBefore){
+            $cache|Export-Clixml -Path $PathToCache -Force
+        }
+        if($Recurse.IsPresent)
+        {
+            Get-ChildItem -Path $Path -Directory | ForEach-Object {
+                Get-XisfDarkFrames -Recurse -Path $_ -UseCache:$UseCache -SkipOnError:$SkipOnError
+            }
+        }
+    }
+}
 Function Invoke-FlatFrameSorting
 {
     [CmdletBinding()]
@@ -718,8 +773,8 @@ Function Invoke-FlatFrameSorting
             $masterCalibratedFlat = "$targetDirectory\$flatDate.MasterFlatCal.$filter.xisf"
             if(-not (Test-Path $masterCalibratedFlat)) {
                 $flats | foreach-object{
-                    $input = $_.Path
-                    $output = Join-Path ($CalibratedFlatsOutput.FullName) ($input.Name.Replace($input.Extension,"")+"_c.xisf")
+                    $x = $_.Path
+                    $output = Join-Path ($CalibratedFlatsOutput.FullName) ($x.Name.Replace($x.Extension,"")+"_c.xisf")
                     Add-Member -InputObject $_ -Name "CalibratedFlat" -MemberType NoteProperty -Value $output -Force
                 }
                 $toCalibrate = $flats | where-object {-not (Test-Path $_.CalibratedFlat)} | foreach-object {$_.Path}
@@ -795,7 +850,7 @@ Function Invoke-LightFrameSorting
         [Parameter(Mandatory,ParameterSetName="ByDirectory")][int]$SetTemp,
 
         [Parameter(Mandatory)][System.IO.FileInfo]$MasterDark,
-        [Parameter(Mandatory)][System.IO.FileInfo]$MasterFlat,
+        [Parameter()][System.IO.FileInfo]$MasterFlat,
         [Parameter(Mandatory)][System.IO.DirectoryInfo]$OutputPath,
 
         [Parameter(Mandatory)][int]$PixInsightSlot,
@@ -803,7 +858,7 @@ Function Invoke-LightFrameSorting
         [Parameter(Mandatory=$false)][int]$OutputPedestal = 0,
         [Parameter(Mandatory=$false)][Switch]$KeepOpen
     )
-    if($XisfStats -eq $null)
+    if($null -eq $XisfStats)
     {
         $XisfStats = Get-ChildItem $DropoffLocation "*.xisf" -File |
             Get-XisfFitsStats |
