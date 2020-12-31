@@ -51,7 +51,9 @@ class XisfFileStats {
     [decimal]$Pedestal
     [string[]]$History
     [System.IO.FileInfo]$Path
-
+    [decimal]$XPIXSZ
+    [decimal]$YPIXSZ
+    [string]$Geometry
     [bool]HasTokensInPath([string[]]$tokens){
             $hasToken=$false
             foreach( $x in $tokens) {
@@ -99,6 +101,9 @@ Function Get-XisfFitsStats
                 Pedestal=$result.Pedestal
                 History=$result.History
                 Path=$Path
+                XPIXSZ=$result.XPIXSZ
+                YPIXSZ=$result.YPIXSZ
+                Geometry=$result.Geometry
             })
         }
         else
@@ -110,6 +115,7 @@ Function Get-XisfFitsStats
             {
                 Read-XisfSignature $reader > $null
                 $header=Read-XisfHeader $reader
+                $geometry = $header.xisf.Image.geometry
                 $fits = $header.xisf.Image.FITSKeyword
                 $filter = $fits.Where({$_.Name -eq 'FILTER'}).value
                 if($filter)
@@ -139,7 +145,10 @@ Function Get-XisfFitsStats
                     SSWeight=$fits.Where{$_.Name -eq 'SSWEIGHT'}.value|%{if($_){$_.Trim("'")}}
                     Pedestal=$fits.Where{$_.Name -eq 'PEDESTAL'}.value|%{if($_){$_.Trim("'")}}
                     History=$fits.Where{$_.Name -eq 'HISTORY'}.comment
+                    XPIXSZ=$fits.Where{$_.Name -eq 'XPIXSZ'}.value|%{if($_){$_.Trim("'")}}
+                    YPIXSZ=$fits.Where{$_.Name -eq 'YPIXSZ'}.value|%{if($_){$_.Trim("'")}}
                     Path=$Path
+                    Geometry=$geometry
                 }
                 $result = [XisfFileStats] $results
                 if($Cache)
