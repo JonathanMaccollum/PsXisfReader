@@ -16,6 +16,7 @@ $data =
     Where-Object {-not $_.IsIntegratedFile()} |
     Where-Object {$_.Filter}
 
+
 $filters = $data|Group-Object Filter|ForEach-Object{$_.Name}
 $stats=$data|
     Group-Object FocalLength,Object,Filter,Exposure |
@@ -83,6 +84,28 @@ $stats|Sort-Object "Total Combined Minutes" -Descending|    Format-Table Object,
 $minDate=($data|Measure-Object ObsDateMinus12hr -Minimum).Minimum
 $maxDate=($data|Measure-Object ObsDateMinus12hr -Maximum).Maximum
 $byDate = $data | Group-Object {[int]$_.ObsDateMinus12hr.ToString("yyyyMMdd")}
+
+$total = [TimeSpan]::FromMinutes(
+    ($stats|Measure-Object "Total Combined Minutes" -Sum).Sum)
+$total.TotalHours.ToString("00")+":"+$total.Minutes.ToString("00")
+
+
+$data|
+    group-object {$_.ObsDateMinus12hr.ToString("yyyy-MM")} | 
+    foreach-object { 
+        $x=$_.Group
+        $et=$x|Measure-ExposureTime -TotalHours
+        new-object psobject -Property @{
+            Name=$_.Name; 
+            Stats=$et
+            TotalHours=$et.TotalHours.ToString("     000.0")
+            Total=$et.Total
+            Count=$et.Count
+        }
+    } |
+    format-table Name,TotalHours,Count
+
+$data|where-object{$_.ObsDateMinus12hr.Year -eq 2020} |Export-Csv -Path "E:\Astrophotography\FullStats.2020.$([DateTime]::Now.ToString('yyyyMMddHHmmss')).csv" -Force
 
 Function Get-DateRange([DateTime]$StartDate,[DateTime]$EndDate){
     $x=$StartDate

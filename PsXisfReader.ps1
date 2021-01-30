@@ -232,3 +232,31 @@ Function Measure-ExposureTime
         add-member -MemberType NoteProperty -InputObject $result -PassThru -Name "Total" -Value $total
     }
 }
+
+
+Function Get-MoonPercentIlluminated
+{
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory,ValueFromPipeline)][DateTime]$Date
+    )
+    begin{
+        $julianConst=2415018.5
+        $knownDateOfNewMoon=
+            [DateTime]::SpecifyKind(
+                [DateTime]"1920-01-21 05:25:00",
+                [DateTimeKind]::Utc).ToOADate()
+        $moonDaysPerCycle=29.5306
+    }
+    process{
+        $julianDate=$Date.ToUniversalTime().ToOADate()+$julianConst
+        $daysSinceLastNewMoon=$knownDateOfNewMoon+$julianConst
+
+        $newMoons = ($julianDate - $daysSinceLastNewMoon) / $moonDaysPerCycle;
+        $daysIntoCycle = ($newMoons - [Math]::Truncate($newMoons))*$moonDaysPerCycle
+        $x=($daysIntoCycle/$moonDaysPerCycle)*[Math]::PI
+        
+        [Math]::Round(
+            [Math]::Sin($x),2)
+    }
+}
