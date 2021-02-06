@@ -1322,9 +1322,27 @@ class XisfPreprocessingState {
         }
         return $null
     }
+    [void]RemoveCorrectedFiles() {
+        if($this.Corrected -and $this.Corrected.Exists){
+            $this.Corrected.Delete()
+            $this.Corrected.Refresh()
+        }
+    }
+    [void]RemoveDebayeredFiles() {
+        if($this.Debayered -and $this.Debayered.Exists){
+            $this.Debayered.Delete()
+            $this.Debayered.Refresh()
+        }
+    }
+    [void]RemoveWeightedFiles() {
+        if($this.Weighted -and $this.Weighted.Exists){
+            $this.Weighted.Delete()
+            $this.Weighted.Refresh()
+        }
+    }
     [void]RemoveAlignedAndDrizzleFiles() {
         $drizzle = $this.GetDrizzleFile()
-        if($drizzle.Exists)
+        if($drizzle -and $drizzle.Exists)
         {
             $drizzle.Delete()
         }
@@ -1657,6 +1675,8 @@ Function Invoke-XisfPostCalibrationColorImageWorkflow
         [Parameter(Mandatory)][System.IO.DirectoryInfo]$IntegratedImageOutputDirectory,
         [Parameter()][System.IO.FileInfo]$AlignmentReference,
         [Parameter(Mandatory)][System.IO.DirectoryInfo]$DarkLibraryPath,
+        [Switch]$RerunCosmeticCorrection,
+        [Switch]$RerunDebayer,
         [Switch]$RerunWeighting,
         [Switch]$RerunAlignment,
         [string]$CfaPattern="RGGB",
@@ -1678,6 +1698,14 @@ Function Invoke-XisfPostCalibrationColorImageWorkflow
             else {
                 $x
             }
+        } |
+        Get-XisfCosmeticCorrectionState -CosmeticCorrectionPath $CorrectedOutputPath |
+        foreach-object {
+            $x = $_
+            if($RerunCosmeticCorrection) {
+                $x.RemoveCorrectedFiles()
+            }
+            $x
         } |
         Get-XisfCosmeticCorrectionState -CosmeticCorrectionPath $CorrectedOutputPath |
         Group-Object {$_.IsCorrected()} |
@@ -1713,6 +1741,14 @@ Function Invoke-XisfPostCalibrationColorImageWorkflow
             }
         } |
         Get-XisfDebayerState -DebayerPath $DebayeredOutputPath |
+        foreach-object {
+            $x = $_
+            if($RerunDebayer -or $RerunCosmeticCorrection) {
+                $x.RemoveDebayeredFiles()
+            }
+            $x
+        } |
+        Get-XisfDebayerState -DebayerPath $DebayeredOutputPath |
         Group-Object {$_.IsDebayered()} |
         ForEach-Object {
             $group=$_.Group
@@ -1735,9 +1771,8 @@ Function Invoke-XisfPostCalibrationColorImageWorkflow
         Get-XisfSubframeSelectorState -SubframeSelectorPath $WeightedOutputPath |
         foreach-object {
             $x = $_
-            if($RerunWeighting -and $x.IsWeighted()) {
-                Remove-Item $x.Weighted -Verbose
-                $x.Weighted.Refresh()
+            if($RerunWeighting -or $RerunDebayer -or $RerunCosmeticCorrection) {
+                $x.RemoveWeightedFiles()
             }
             $x
         } |
@@ -1768,7 +1803,7 @@ Function Invoke-XisfPostCalibrationColorImageWorkflow
         Get-XisfAlignedState -AlignedPath $AlignedOutputPath |
         foreach-object {
             $x = $_
-            if($RerunAlignment -or $RerunWeighting) {
+            if($RerunAlignment -or $RerunWeighting -or $RerunDebayer -or $RerunCosmeticCorrection) {
                 $x.RemoveAlignedAndDrizzleFiles()
             }
             $x

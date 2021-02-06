@@ -1,7 +1,7 @@
 import-module $PSScriptRoot/PsXisfReader.psd1 -Force
 $ErrorActionPreference="STOP"
 
-$target="E:\Astrophotography\135mm\Sh2-126b"
+$target="E:\Astrophotography\135mm\Orion Panel 7"
 $alignmentReference=$null
 Clear-Host
 
@@ -23,7 +23,9 @@ $data = Invoke-XisfPostCalibrationColorImageWorkflow `
     -BackupCalibrationPaths @("T:\PixInsightLT\Calibrated","N:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated") `
     -PixInsightSlot 200 `
     -RerunWeighting:$false `
-    -RerunAlignment `
+    -RerunCosmeticCorrection:$true `
+    -RerunDebayer:$false `
+    -RerunAlignment:$false `
     -IntegratedImageOutputDirectory $target `
     -AlignmentReference $alignmentReference `
     -GenerateDrizzleData `
@@ -50,9 +52,19 @@ if($toReject -and (Read-Host -Prompt "Move $($toReject.Count) Rejected files?") 
     }
 }
 
+if((Read-Host -Prompt "Cleanup intermediate files (debayered, weighted, aligned, drizzle)?") -eq "Y"){
+    $data|foreach-object{
+        $_.RemoveAlignedAndDrizzleFiles()
+        $_.RemoveWeightedFiles()
+        $_.RemoveDebayeredFiles()
+        $_.RemoveCorrectedFiles()
+    }
+}
+
 $mostRecent=
     $data.Stats|
     Sort-Object LocalDate -desc |
     Select-Object -first 1
-
-$data | Export-Clixml -Path (Join-Path $target "Stats.$($mostRecent.LocalDate.ToString('yyyyMMdd HHmmss')).clixml")
+if($data){
+    $data | Export-Clixml -Path (Join-Path $target "Stats.$($mostRecent.LocalDate.ToString('yyyyMMdd HHmmss')).clixml")
+}
