@@ -1662,7 +1662,8 @@ Function Invoke-XisfPostCalibrationColorImageWorkflow
         [string]$CfaPattern="RGGB",
         [int]$PixInsightSlot,
         [string]$ApprovalExpression,
-        [string]$WeightingExpression
+        [string]$WeightingExpression,
+        [switch]$GenerateDrizzleData
     )
     $RawSubs |
         Get-XisfCalibrationState `
@@ -1849,7 +1850,8 @@ Function Invoke-XisfPostCalibrationColorImageWorkflow
                             -Rejection "Rejection_ESD" `
                             -LinearFitLow 5 `
                             -LinearFitHigh 4 `
-                            -PixInsightSlot $PixInsightSlot
+                            -PixInsightSlot $PixInsightSlot `
+                            -GenerateDrizzleData:$GenerateDrizzleData
                         }
                         catch {
                             write-warning $_.ToString()

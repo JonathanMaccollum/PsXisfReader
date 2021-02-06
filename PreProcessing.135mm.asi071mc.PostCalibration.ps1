@@ -1,8 +1,7 @@
 import-module $PSScriptRoot/PsXisfReader.psd1 -Force
 $ErrorActionPreference="STOP"
 
-$target="E:\Astrophotography\50mm\M81 M82 50mm"
-#$alignmentReference="E:\Astrophotography\50mm\Orion 50mm\Orion 50mm.Ha3nm.30x6min.ESD.Drizzle2x.xisf"
+$target="E:\Astrophotography\135mm\Sh2-126b"
 $alignmentReference=$null
 Clear-Host
 
@@ -10,8 +9,9 @@ $rawSubs =
     Get-XisfLightFrames -Path $target -Recurse |
     Where-Object {-not $_.HasTokensInPath(@("reject","process","testing","clouds","draft","cloudy"))} |
     Where-Object {-not $_.IsIntegratedFile()} |
-    Where-Object Filter -eq "D1"
-
+    Where-Object Filter -eq "L3"
+$alignmentReference=$null
+    
 $data = Invoke-XisfPostCalibrationColorImageWorkflow `
     -RawSubs $rawSubs `
     -CalibrationPath "E:\PixInsightLT\Calibrated" `
@@ -28,15 +28,15 @@ $data = Invoke-XisfPostCalibrationColorImageWorkflow `
     -AlignmentReference $alignmentReference `
     -GenerateDrizzleData `
     -CfaPattern "RGGB" `
-    -ApprovalExpression "Median<100 && FWHM<4.5" `
+    -ApprovalExpression "Median<120 && FWHM<0.98 && Eccentricity<0.62" `
     -WeightingExpression "(15*(1-(FWHM-FWHMMin)/(FWHMMax-FWHMMin))
     +  5*(1-(Eccentricity-EccentricityMin)/(EccentricityMax-EccentricityMin))
-    + 05*(SNRWeight-SNRWeightMin)/(SNRWeightMax-SNRWeightMin)
-    + 20*(1-(Median-MedianMin)/(MedianMax-MedianMin))
-    + 40*(Stars-StarsMin)/(StarsMax-StarsMin))
+    + 15*(SNRWeight-SNRWeightMin)/(SNRWeightMax-SNRWeightMin)
+    + 30*(1-(Median-MedianMin)/(MedianMax-MedianMin))
+    + 20*(Stars-StarsMin)/(StarsMax-StarsMin))
     + 20" `
     -Verbose
-
+                
 $stacked = $data | where-object {$_.Aligned -and (Test-Path $_.Aligned)}
 $toReject = $data | where-object {-not $_.Aligned -or (-not (Test-Path $_.Aligned))}
 Write-Host "Stacked: $($stacked.Stats | Measure-ExposureTime -TotalMinutes)"
