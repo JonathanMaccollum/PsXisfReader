@@ -15,7 +15,7 @@ Clear-Host
 
 $rawSubs =
     Get-XisfLightFrames -Path $target -Recurse -SkipOnError |
-    Where-Object {-not $_.HasTokensInPath(@("reject","process","testing","clouds","draft","cloudy"))} |
+    Where-Object {-not $_.HasTokensInPath(@("reject","process","testing","clouds","draft","cloudy","_ez_LS_"))} |
     Where-Object {-not $_.IsIntegratedFile()} |
     Where-Object Filter -eq "L3"
 
