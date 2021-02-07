@@ -1,4 +1,5 @@
-﻿Function Wait-PixInsightInstance([int]$PixInsightSlot)
+﻿[Reflection.Assembly]::Load("System.Text.RegularExpressions") >>$null
+Function Wait-PixInsightInstance([int]$PixInsightSlot)
 {
     [CmdletBinding]
 
@@ -2209,31 +2210,48 @@ Function Invoke-XisfPostCalibrationMonochromeImageWorkflow
 
 Function Get-MasterDarkLibrary {
     param (
-        [Parameter(Mandatory)][System.IO.DirectoryInfo]$Path
+        [Parameter(Mandatory)][System.IO.DirectoryInfo]$Path,
+        [Parameter(Mandatory)][string]$Pattern
     )
-    Get-ChildItem ($Path.FullName) "*MasterDark.Gain.*.Offset.*.*C*x*s.xisf" -File |
-        Get-XisfFitsStats |
-        Foreach-Object {
-            # note: expecting file names with the pattern: "*MasterDark.Gain.___.Offset.___.-15C.__x__s.xisf"
-            $x=$_
-            $parts=$x.Path.Name.Split(".")
+    begin{
+        $regex=[System.Text.RegularExpressions.Regex]::new($Pattern)
+    }
+    process{
+        Get-ChildItem ($Path.FullName) -File |
+        ForEach-Object {
+            $y = $regex.Matches($_.Name)
+            if($y.Success){
+                $gain = $y.Groups | where-object Name -eq "gain" | foreach-object {$_.Value}
+                $offset = $y.Groups | where-object Name -eq "offset" | foreach-object {$_.Value}
+                $temp = $y.Groups | where-object Name -eq "temp" | foreach-object {$_.Value}
+                $numberOfExposures = $y.Groups | where-object Name -eq "numberOfExposures" | foreach-object {$_.Value}
+                $exposure = $y.Groups | where-object Name -eq "exposure" | foreach-object {$_.Value}
 
-            $gain=$parts[$parts.IndexOf("Gain")+1]
-            $offset=$parts[$parts.IndexOf("Offset")+1]
-            $temp=$parts[$parts.IndexOf("Offset")+2]
-            $exposure=$parts[$parts.IndexOf("Offset")+3]
-            if(-not $x.SetTemp){
-                $x.SetTemp=[decimal]$temp.TrimEnd("C")
+                if(-not $gain){
+                    write-warning "Unable to parse value for gain file... $($_.Name)"
+                }
+                elseif(-not $offset){
+                    write-warning "Unable to parse value for offset file... $($_.Name)"
+                }
+                elseif(-not $temp){
+                    write-warning "Unable to parse value for temp file... $($_.Name)"
+                }
+                elseif(-not $exposure){
+                    write-warning "Unable to parse value for exposure file... $($_.Name)"
+                }
+                else{
+                    $x = $_ | Get-XisfFitsStats
+                    $x.SetTemp = [Decimal]$temp
+                    $x.Gain=[Decimal]$gain
+                    $x.Offset=[Decimal]$offset
+                    $x.Exposure=[decimal]$exposure
+                    $x | Add-Member -NotePropertyName "NumberOfExposures" -NotePropertyValue ([int]$numberOfExposures)
+                    $x
+                }
             }
-            if(-not $x.Gain) {
-                $x.Gain=[decimal]$gain
+            else{
+                Write-Warning "Skipping file: does not match specified pattern... $($_.Name)"
             }
-            if(-not $x.Offset){
-                $x.Offset=[decimal]$offset
-            }
-            if(-not $x.Exposure){
-                $x.Exposure=[decimal]$exposure.Split('x')[1].TrimEnd("s")
-            }
-            $x
         }
+    }
 }
