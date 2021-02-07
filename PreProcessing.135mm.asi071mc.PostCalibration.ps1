@@ -1,7 +1,7 @@
 import-module $PSScriptRoot/PsXisfReader.psd1 -Force
 $ErrorActionPreference="STOP"
 
-$target="E:\Astrophotography\135mm\Orion Panel 7"
+$target="E:\Astrophotography\135mm\Orion Panel 8"
 $alignmentReference=$null
 Clear-Host
 
@@ -23,8 +23,11 @@ $data = Invoke-XisfPostCalibrationColorImageWorkflow `
     -BackupCalibrationPaths @("T:\PixInsightLT\Calibrated","N:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated") `
     -PixInsightSlot 200 `
     -RerunWeighting:$false `
-    -RerunCosmeticCorrection:$true `
+    -SkipWeighting:$false `
+    -RerunCosmeticCorrection:$false `
+    -SkipCosmeticCorrection:$false `
     -RerunDebayer:$false `
+    -SkipDebayer:$false `
     -RerunAlignment:$false `
     -IntegratedImageOutputDirectory $target `
     -AlignmentReference $alignmentReference `

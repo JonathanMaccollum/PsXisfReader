@@ -1702,8 +1702,11 @@ Function Invoke-XisfPostCalibrationColorImageWorkflow
         [Parameter()][System.IO.FileInfo]$AlignmentReference,
         [Parameter(Mandatory)][System.IO.DirectoryInfo]$DarkLibraryPath,
         [Switch]$RerunCosmeticCorrection,
+        [Switch]$SkipCosmeticCorrection,
         [Switch]$RerunDebayer,
+        [Switch]$SkipDebayer,
         [Switch]$RerunWeighting,
+        [Switch]$SkipWeighting,
         [Switch]$RerunAlignment,
         [string]$CfaPattern="RGGB",
         [int]$PixInsightSlot,
@@ -1728,8 +1731,13 @@ Function Invoke-XisfPostCalibrationColorImageWorkflow
         Get-XisfCosmeticCorrectionState -CosmeticCorrectionPath $CorrectedOutputPath |
         foreach-object {
             $x = $_
-            if($RerunCosmeticCorrection) {
-                $x.RemoveCorrectedFiles()
+            if($SkipCosmeticCorrection){
+                $x.Corrected=$x.Calibrated
+            }
+            else{
+                if($RerunCosmeticCorrection) {
+                    $x.RemoveCorrectedFiles()
+                }
             }
             $x
         } |
@@ -1769,8 +1777,13 @@ Function Invoke-XisfPostCalibrationColorImageWorkflow
         Get-XisfDebayerState -DebayerPath $DebayeredOutputPath |
         foreach-object {
             $x = $_
-            if($RerunDebayer -or $RerunCosmeticCorrection) {
-                $x.RemoveDebayeredFiles()
+            if($SkipDebayer){
+                $x.Debayered=$x.Corrected
+            }
+            else{
+                if($RerunDebayer -or $RerunCosmeticCorrection) {
+                    $x.RemoveDebayeredFiles()
+                }
             }
             $x
         } |
@@ -1797,8 +1810,13 @@ Function Invoke-XisfPostCalibrationColorImageWorkflow
         Get-XisfSubframeSelectorState -SubframeSelectorPath $WeightedOutputPath |
         foreach-object {
             $x = $_
-            if($RerunWeighting -or $RerunDebayer -or $RerunCosmeticCorrection) {
-                $x.RemoveWeightedFiles()
+            if($SkipWeighting){
+                $x.Weighted=$x.Debayered
+            }
+            else{
+                if($RerunWeighting -or $RerunDebayer -or $RerunCosmeticCorrection) {
+                    $x.RemoveWeightedFiles()
+                }
             }
             $x
         } |
@@ -1898,11 +1916,27 @@ Function Invoke-XisfPostCalibrationColorImageWorkflow
                         $exposure=$_.Group[0].Exposure;
                         $outputFileName+=".$filter.$($_.Group.Count)x$($exposure)s"
                     }
+                    if($SkipCosmeticCorrection){
+                        $outputFileName+=".nocc"
+                    }
+                    if($SkipWeighting){
+                        $outputFileName+=".noweights"
+                    }
                     $outputFileName+=".ESD.xisf"
                     $outputFile = Join-Path ($IntegratedImageOutputDirectory.FullName) $outputFileName
                     if(-not (test-path $outputFile)) {
                         write-host ("Integrating  "+ $outputFileName)
                         $toStack = $byFilter | sort-object SSWeight -Descending
+                        $toStack | 
+                            Group-Object Filter | 
+                            foreach-object {$dur=$_.Group|Measure-ExposureTime -TotalSeconds; new-object psobject -Property @{Filter=$_.Name; ExposureTime=$dur}} |
+                            foreach-object {
+                                write-host "$($_.Filter): $($_.Exposure)"
+                            }
+                        $weightKeyword="SSWEIGHT"
+                        if($SkipWeighting){
+                            $weightKeyword=$null
+                        }
                         try {
                         Invoke-PiLightIntegration `
                             -Images ($toStack|foreach-object {$_.Path}) `
@@ -1912,7 +1946,8 @@ Function Invoke-XisfPostCalibrationColorImageWorkflow
                             -LinearFitLow 5 `
                             -LinearFitHigh 4 `
                             -PixInsightSlot $PixInsightSlot `
-                            -GenerateDrizzleData:$GenerateDrizzleData
+                            -GenerateDrizzleData:$GenerateDrizzleData `
+                            -WeightKeyword:$weightKeyword
                         }
                         catch {
                             write-warning $_.ToString()
@@ -2119,6 +2154,17 @@ Function Invoke-XisfPostCalibrationMonochromeImageWorkflow
                         $exposure=$_.Group[0].Exposure;
                         $outputFileName+=".$filter.$($_.Group.Count)x$($exposure)s"
                     }
+
+                    if($SkipCosmeticCorrection){
+                        $outputFileName+=".nocc"
+                    }
+                    if($SkipDebayer){
+                        $outputFileName+=".nodebayer"
+                    }
+                    if($SkipWeighting){
+                        $outputFileName+=".noweights"
+                    }
+
                     $outputFileName+=".ESD.xisf"
                     $outputFile = Join-Path ($IntegratedImageOutputDirectory.FullName) $outputFileName
                     if(-not (test-path $outputFile)) {
