@@ -1873,10 +1873,225 @@ Function Invoke-XisfPostCalibrationColorImageWorkflow
                         $outputFileName+=".$filter.$($_.Group.Count)x$($exposure)s"
                     }
                     $outputFileName+=".ESD.xisf"
-                    $outputFile = Join-Path $target $outputFileName
+                    $outputFile = Join-Path ($IntegratedImageOutputDirectory.FullName) $outputFileName
                     if(-not (test-path $outputFile)) {
                         write-host ("Integrating  "+ $outputFileName)
                         $toStack = $byFilter | sort-object SSWeight -Descending
+                        try {
+                        Invoke-PiLightIntegration `
+                            -Images ($toStack|foreach-object {$_.Path}) `
+                            -OutputFile $outputFile `
+                            -KeepOpen `
+                            -Rejection "Rejection_ESD" `
+                            -LinearFitLow 5 `
+                            -LinearFitHigh 4 `
+                            -PixInsightSlot $PixInsightSlot `
+                            -GenerateDrizzleData:$GenerateDrizzleData
+                        }
+                        catch {
+                            write-warning $_.ToString()
+                            throw
+                        }
+                    }
+                }
+
+                $group
+            }
+            else{
+                $group
+            }
+        }
+}
+Function Invoke-XisfPostCalibrationMonochromeImageWorkflow
+{
+    param(
+        [Parameter(Mandatory)][XisfFileStats[]]$RawSubs,
+        [Parameter(Mandatory)][System.IO.DirectoryInfo]$CalibrationPath,
+        [Parameter(Mandatory)][System.IO.DirectoryInfo[]]$BackupCalibrationPaths,
+        [Parameter(Mandatory)][System.IO.DirectoryInfo]$CorrectedOutputPath,
+        [Parameter(Mandatory)][System.IO.DirectoryInfo]$WeightedOutputPath,
+        [Parameter(Mandatory)][System.IO.DirectoryInfo]$AlignedOutputPath,
+        [Parameter(Mandatory)][System.IO.DirectoryInfo]$IntegratedImageOutputDirectory,
+        [Parameter()][System.IO.FileInfo]$AlignmentReference,
+        [Parameter(Mandatory)][System.IO.DirectoryInfo]$DarkLibraryPath,
+        [Switch]$RerunCosmeticCorrection,
+        [Switch]$RerunWeighting,
+        [Switch]$RerunAlignment,
+        [int]$PixInsightSlot,
+        [string]$ApprovalExpression,
+        [string]$WeightingExpression,
+        [switch]$GenerateDrizzleData
+    )
+    $RawSubs |
+        Get-XisfCalibrationState `
+            -CalibratedPath $CalibrationPath `
+            -AdditionalSearchPaths $BackupCalibrationPaths `
+            -Verbose |
+        foreach-object {
+            $x = $_
+            if(-not $x.IsCalibrated()){
+                Write-Warning "Skipping file: Uncalibrated: $($x.Path)"
+            }
+            else {
+                $x
+            }
+        } |
+        Get-XisfCosmeticCorrectionState -CosmeticCorrectionPath $CorrectedOutputPath |
+        foreach-object {
+            $x = $_
+            if($RerunCosmeticCorrection) {
+                $x.RemoveCorrectedFiles()
+            }
+            $x
+        } |
+        Get-XisfCosmeticCorrectionState -CosmeticCorrectionPath $CorrectedOutputPath |
+        Group-Object {$_.IsCorrected()} |
+        ForEach-Object {
+            $group=$_.Group
+            if( $group[0].IsCorrected() ){
+                $group
+            }
+            else {
+                $group|group-object{
+                    ($_.Calibrated | Get-XisfFitsStats | Get-XisfCalibrationState -CalibratedPath $CalibrationPath).MasterDark
+                } | foreach-object {
+                    
+                    $masterDarkFileName = $_.Name
+                    $masterDark = get-childitem $DarkLibraryPath *.xisf -Recurse | where-object {$_.Name -eq $masterDarkFileName} | Select-Object -First 1
+                    $images = $_.Group
+                    Write-Host "Correcting $($images.Count) Images"
+                    if(-not $masterDark) {
+                        write-warning "Skipping $($images.Count) files... unable to locate master dark: $masterDarkFileName"
+                    }
+                    else{
+                        Invoke-PiCosmeticCorrection `
+                            -Images ($images.Calibrated) `
+                            -HotDarkLevel 0.4 `
+                            -MasterDark $masterDark `
+                            -OutputPath $CorrectedOutputPath `
+                            -PixInsightSlot $PixInsightSlot
+                    }
+                }
+                $group |
+                    Get-XisfCosmeticCorrectionState `
+                        -CosmeticCorrectionPath $CorrectedOutputPath
+            }
+        } |
+        Get-XisfSubframeSelectorState -SubframeSelectorPath $WeightedOutputPath |
+        foreach-object {
+            $x = $_
+            if($RerunWeighting -or $RerunCosmeticCorrection) {
+                $x.RemoveWeightedFiles()
+            }
+            $x
+        } |
+        Group-Object { $_.IsWeighted() } |
+        ForEach-Object {
+            $group=$_.Group
+            if($group | Where-Object {$_.IsWeighted()}) {
+                $group
+            }
+            else{
+                $group | group-object {$_.Stats.Filter } | foreach-object {
+                    $byFilter = $_.Group
+                    $filter=$byFilter[0].Stats.Filter
+                    Write-Host "Weighting $($byFilter.Count) Images for filter $filter"
+                    Start-PiSubframeSelectorWeighting `
+                        -PixInsightSlot $PixInsightSlot `
+                        -OutputPath $WeightedOutputPath `
+                        -Images ($byFilter.Corrected) `
+                        -ApprovalExpression $ApprovalExpression `
+                        -WeightingExpression $WeightingExpression
+            
+                }
+                $group |
+                    Get-XisfSubframeSelectorState `
+                        -SubframeSelectorPath $WeightedOutputPath
+            }
+        } |
+        Get-XisfAlignedState -AlignedPath $AlignedOutputPath |
+        foreach-object {
+            $x = $_
+            if($RerunAlignment -or $RerunWeighting -or $RerunCosmeticCorrection) {
+                $x.RemoveAlignedAndDrizzleFiles()
+            }
+            $x
+        } |
+        Group-Object {$_.IsAligned()} |
+        ForEach-Object {
+            $group=$_.Group
+            if( $group[0].IsAligned() ){
+                $group
+            }
+            else {
+                $approved = $group |
+                    Where-object {$_.IsWeighted()} |
+                    foreach-object{$_.Weighted} |
+                    Get-XisfFitsStats
+                if(-not $approved){
+                    $group
+                }
+                else {
+                    if($AlignmentReference -and (-not $AlignmentReference.Exists) )
+                    {
+                        Write-Warning "The specified alignment file could not be found $($AlignmentReference). A new reference will be selected."
+                    }
+                    $reference = $AlignmentReference
+                    if(-not ($alignmentReference -and (test-path $reference))){
+                        $reference =  ($approved |
+                            Sort-Object SSWeight -Descending |
+                            Select-Object -First 1).Path
+                    }
+
+                    Write-Host "Aligning $($approved.Count) Images to $($reference)"
+                    Invoke-PiStarAlignment `
+                        -PixInsightSlot $PixInsightSlot `
+                        -Images ($approved.Path) `
+                        -ReferencePath ($reference) `
+                        -OutputPath $AlignedOutputPath `
+                        -Interpolation Lanczos4 `
+                        -ClampingThreshold 0.2
+                    $group |
+                        Get-XisfAlignedState `
+                            -AlignedPath $AlignedOutputPath
+                    
+                }
+            }
+        } |
+        Group-Object {$_.IsAligned()} |
+        ForEach-Object {
+            $group=$_.Group
+            if( $group[0].IsAligned() ){
+                $approved = $group |
+                    foreach-object{$_.Aligned} |
+                    Get-XisfFitsStats
+                $reference =  $approved |
+                    Sort-Object SSWeight -Descending |
+                    Select-Object -First 1
+                
+                $group|group-object {$_.Stats.Filter}|foreach-object {
+                    $byFilter=$_.Group |
+                        where-object {$_.Aligned -and (Test-Path $_.Aligned)} |
+                        foreach-object{$_.Aligned} |
+                        Get-XisfFitsStats
+                    $filter=$byFilter[0].Filter
+                        
+                    $outputFileName = $reference.Object
+                    $byFilter | group-object Exposure | foreach-object {
+                        $exposure=$_.Group[0].Exposure;
+                        $outputFileName+=".$filter.$($_.Group.Count)x$($exposure)s"
+                    }
+                    $outputFileName+=".ESD.xisf"
+                    $outputFile = Join-Path ($IntegratedImageOutputDirectory.FullName) $outputFileName
+                    if(-not (test-path $outputFile)) {
+                        write-host ("Integrating  "+ $outputFileName)
+                        $toStack = $byFilter | sort-object SSWeight -Descending
+                        $toStack | 
+                        Group-Object Filter | 
+                        foreach-object {$dur=$_.Group|Measure-ExposureTime -TotalSeconds; new-object psobject -Property @{Filter=$_.Name; ExposureTime=$dur}} |
+                        foreach-object {
+                            write-host "$($_.Filter): $($_.Exposure)"
+                        }
                         try {
                         Invoke-PiLightIntegration `
                             -Images ($toStack|foreach-object {$_.Path}) `
