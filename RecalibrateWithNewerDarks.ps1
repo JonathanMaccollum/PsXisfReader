@@ -1,8 +1,8 @@
 import-module $PSScriptRoot/PsXisfReader.psd1 -Force
 $ErrorActionPreference="STOP"
 $VerbosePreference="Continue"
-$target="E:\Astrophotography\50mm\Taurus to Pleiades 1 50mm"
-
+$target="E:\Astrophotography\50mm\Taurus to Pleiades 2 50mm"
+$WhatIf=$false
 $DarkLibraryFiles = Get-MasterDarkLibrary `
     -Path "E:\Astrophotography\DarkLibrary\ZWO ASI183MM Pro" `
     -Pattern "^(?<date>\d+).MasterDark.Gain.(?<gain>\d+).Offset.(?<offset>\d+).(?<temp>-?\d+)C.(?<numberOfExposures>\d+)x(?<exposure>\d+)s.xisf$"
@@ -13,30 +13,6 @@ $rawSubs =
     Where-Object {-not $_.HasTokensInPath(@("reject","process","testing","clouds","draft","cloudy","_ez_LS_"))} |
     Where-Object {-not $_.IsIntegratedFile()} 
 
-$groups = $rawSubs|
-    group-object Instrument,Filter,Exposure,SetTemp,FocalLength,Gain,Offset|
-    foreach-object{
-        new-object psobject -Property @{
-            Instrument=$_.Group[0].Instrument
-            Exposure=$_.Group[0].Exposure
-            SetTemp=$_.Group[0].SetTemp
-            Filter=$_.Group[0].Filter
-            FocalLength=$_.Group[0].FocalLength
-            Gain=$_.Group[0].Gain
-            Offset=$_.Group[0].Offset
-            Group=$_.Group
-        }        
-    }
-foreach($group in $groups){
-    $calibratedResults = $group.Group |
-        Get-XisfCalibrationState -CalibratedPath "E:\PixInsightLT\Calibrated" | 
-        foreach-object {
-            $calibratedFile = $_.Calibrated | Get-XisfFitsStats
-            $state=New-XisfPreprocessingState -Stats $calibratedFile 
-        }
-
-
-}
 $calibrationState = $rawSubs |
     Get-XisfCalibrationState -CalibratedPath "E:\PixInsightLT\Calibrated" | 
     foreach-object {
@@ -67,8 +43,6 @@ $calibrationState|group-object MasterFlat,MasterDark,Pedestal,Gain,Offset,SetTem
         $exposure=$x.Exposure
         $files = $_.Group
 
-        Write-Host "Re-calibrating $($files.Count) using flat master $($masterFlat.Name) and output pedestal $pedestal"
-        Write-Host "Previous Dark: $($masterDark.Name)"
         $availableDarks = $DarkLibraryFiles |
             where-object {
                 $dark=$_
@@ -88,12 +62,19 @@ $calibrationState|group-object MasterFlat,MasterDark,Pedestal,Gain,Offset,SetTem
             Write-Host "Current data is already calibrated with the latest dark: $($latestDark.Path)"
         }
         else{
-            Invoke-PiLightCalibration `
+            Write-Host "Re-calibrating $($files.Count) using flat master $($masterFlat.Name) and output pedestal $pedestal"
+            Write-Host "Previous Dark: $($masterDark.Name)"
+            Write-Host "Updated  Dark: $($latestDark.Path.Name)"
+            if(-not $WhatIf){
+                Invoke-PiLightCalibration `
                 -PixInsightSlot 200 `
                 -Images ($files.Path) `
                 -MasterDark ($latestDark.Path) `
                 -MasterFlat $masterFlat `
                 -OutputPath "E:\PixInsightLT\ReCalibrated" `
                 -OutputPedestal 200 -KeepOpen
+            }else{
+                Write-Host "What-If was set... no calibration was performed."
+            }
         }
     }
