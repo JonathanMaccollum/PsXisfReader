@@ -1,8 +1,10 @@
 import-module $PSScriptRoot/PsXisfReader.psd1 -Force
 $ErrorActionPreference="STOP"
 $VerbosePreference="Continue"
-$target="E:\Astrophotography\50mm\Taurus to Pleiades 1 50mm"
-#$alignmentReference="PatchworkCygnus_0_3.BHS_Ha.11x240s.BHS_Ha.6x300s.BHS_Ha.5x600s.xisf"
+$target="E:\Astrophotography\135mm\Flaming Star Panel 1"
+$alignmentReference=$null
+
+#$alignmentReference="sh2-240.BHS_Ha.23x300s.Adaptive.LF.xisf"
 #$alignmentReference="PatchworkCygnus_0_4.BHS_Ha.36x300s.Adaptive.xisf"
 #$alignmentReference="PatchworkCygnus_1_1.BHS_Ha.15x600s.Ha.17x600s.Ha.21x240s.xisf"
 #$alignmentReference="PatchworkCygnus_1_2.BHS_Ha.40x240s.Ha.6x240s.BHS_Ha.11x600s.Ha.8x600s.xisf"
@@ -14,16 +16,24 @@ $target="E:\Astrophotography\50mm\Taurus to Pleiades 1 50mm"
 #$alignmentReference="PatchworkCygnus_2_4.BHS_Ha.10x300s.BHS_Ha.2x360s.Adaptive.xisf"
 #$alignmentReference="Soul Nebula.BHS_Ha.13x600s.Adaptive.ESD.xisf"
 #$alignmentReference="Cassiopeia.BHS_Ha.10x600s.Adaptive.ESD.xisf"
-$alignmentReference=Join-Path $target "Taurus to Pleiades 1 50mm.BHS_Ha.34x360s.ESD.xisf"
+#$alignmentReference="Flaming Star Panel 2.BHS_Ha.21x300s.Adaptive.LF.xisf"
+#$alignmentReference="NGC1333.BHS_Ha.34x300s.BHS_Ha.2x600s.Adaptive.LF.xisf"
+#$alignmentReference="LDN1622 and M78.BHS_Ha.52x300s.Adaptive.LF.xisf"
+#$alignmentReference="Cone Nebula.BHS_Ha.14x300s.Adaptive.LF.xisf"
+#$alignmentReference="Bubble and Lobster Claw.BHS_Ha.10x300s.Adaptive.LF.xisf"
+#$alignmentReference="Owl Nebula.BHS_Oiii.27x360s.LF.xisf"
+$alignmentReference= Join-Path $target "Flaming Star Panel 1.BHS_Ha.24x300s.BHS_Ha.9x360s.LF.xisf"
 Clear-Host
-
-$rawSubs =
+$rawSubs = 
     Get-XisfLightFrames -Path $target -Recurse -UseCache -SkipOnError |
     Where-Object {-not $_.HasTokensInPath(@("reject","process","testing","clouds","draft","cloudy","_ez_LS_"))} |
-    #Where-Object Filter -ne "BHS_Ha" |
-    #Where-Object Filter -eq "BHS_OIII" |
-    Where-Object {-not $_.IsIntegratedFile()} 
+    #Where-Object Filter -ne "BHS_Oiii" |
+    #Where-Object Filter -ne "L3" |
+    #Where-Object Filter -ne "IR742" |
+    #Where-Object Filter -eq "BHS_Ha" |
+    Where-Object {-not $_.IsIntegratedFile()}
 
+    
 $data=Invoke-XisfPostCalibrationMonochromeImageWorkflow `
     -RawSubs $rawSubs `
     -CalibrationPath "E:\PixInsightLT\Calibrated" `
