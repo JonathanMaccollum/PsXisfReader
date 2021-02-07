@@ -386,7 +386,9 @@ Function Invoke-PiLightCalibration
         $masterFlatPath=""
         $masterFlatEnabled = "false"
     }
-    
+    if(-not ($OutputPath.Exists)){
+        $OutputPath.Create()
+    }
     $outputDirectory = Get-Item ($OutputPath.FullName) | Format-PiPath
     $ImageDefinition = [string]::Join("`r`n   , ",
     ($Images | ForEach-Object {
