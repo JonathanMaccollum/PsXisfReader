@@ -2,10 +2,10 @@ import-module $PSScriptRoot/PsXisfReader.psd1 -Force
 
 $ErrorActionPreference="STOP"
 
-$DropoffLocation = "D:\Backups\Camera\Dropoff\NINA"
+$DropoffLocation = "D:\Backups\Camera\Dropoff\NINACS"
 $ArchiveDirectory="E:\Astrophotography"
 $CalibratedOutput = "E:\PixInsightLT\Calibrated"
-
+#$darks = Get-XisfDarkFrames -SkipOnError -Path "E:\Astrophotography\DarkLibrary\ZWO ASI183MM Pro" -UseCache -Recurse
 Invoke-DarkFrameSorting `
     -DropoffLocation $DropoffLocation `
     -ArchiveDirectory $ArchiveDirectory `
@@ -20,6 +20,7 @@ Invoke-FlatFrameSorting `
     -ArchiveDirectory $ArchiveDirectory `
     -CalibratedFlatsOutput "E:\PixInsightLT\CalibratedFlats" `
     -PixInsightSlot 200
+
 $DarkLibraryFiles =
     Get-ChildItem "E:\Astrophotography\DarkLibrary\ZWO ASI183MM Pro" "*MasterDark.Gain.*.Offset.*.*C*x*s.xisf" -File |
     Get-XisfFitsStats |
@@ -54,7 +55,7 @@ $DarkLibrary=($DarkLibraryFiles|group-object Instrument,Gain,Offset,Exposure,Set
     $exposure=$_.Group[0].Exposure
     $setTemp=$_.Group[0].SetTemp
     
-    $dark=$_.Group | sort-object {(Get-Item $_.Path).LastModifiedDate} -Descending | select-object -First 1
+    $dark=$_.Group | sort-object {(Get-Item $_.Path).LastWriteTime} -Descending | select-object -First 1
     new-object psobject -Property @{
         Instrument=$instrument
         Gain=$gain
@@ -78,6 +79,7 @@ Get-ChildItem $DropoffLocation *.xisf |
         $gain=[decimal]$x.Gain
         $offset=[decimal]$x.Offset
         $exposure=[decimal]$x.Exposure
+        $ccdTemp=[decimal]$x.CCDTemp
         $setTemp=[decimal]$x.SetTemp
         $masterDark = $DarkLibrary | where-object {
             $dark = $_
@@ -86,6 +88,7 @@ Get-ChildItem $DropoffLocation *.xisf |
             ($dark.Offset-eq $offset) -and
             ($dark.Exposure-eq $exposure) -and
             ($dark.SetTemp-eq $setTemp)
+            #([Math]::abs($dark.SetTemp - $ccdTemp) -lt 3)
         } | select-object -first 1
 
         if(-not $masterDark){
@@ -97,7 +100,7 @@ Get-ChildItem $DropoffLocation *.xisf |
                 foreach-object {
                     $filter = $_.Group[0].Filter
                     $focalLength=$_.Group[0].FocalLength
-                    $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20200725.MasterFlatCal.$filter.xisf"
+                    $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20200926.MasterFlatCal.$filter.xisf"
 
                     if(-not (test-path $masterFlat)) {
                         Write-Warning "Skipping $($_.Group.Count) frames at ($focalLength)mm with filter $filter. Reason: No master flat was found."

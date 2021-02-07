@@ -57,7 +57,7 @@ $DarkLibrary=($DarkLibraryFiles|group-object Instrument,Gain,Offset,Exposure,Set
     $exposure=$_.Group[0].Exposure
     $setTemp=$_.Group[0].SetTemp
     
-    $dark=$_.Group | sort-object {(Get-Item $_.Path).LastModifiedDate} -Descending | select-object -First 1
+    $dark=$_.Group | sort-object {(Get-Item $_.Path).LastWriteTime} -Descending | select-object -First 1
     new-object psobject -Property @{
         Instrument=$instrument
         Gain=$gain
@@ -100,12 +100,11 @@ Get-ChildItem $DropoffLocation *.xisf |
                 foreach-object {
                     $filter = $_.Group[0].Filter
                     $focalLength=$_.Group[0].FocalLength
-                    $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20200626.MasterFlatCal.$filter.xisf"
+                    $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20201223.MasterFlatCal.$filter.xisf"
 
                     if(-not (test-path $masterFlat)) {
-                        Write-Warning "Skipping $($_.Group.Count) frames at ($focalLength)mm with filter $filter. Reason: No master flat was found."
+                        Write-Warning "Calibrating $($_.Group.Count) frames at ($focalLength)mm with filter $filter without flats. Reason: No master flat was found."
                     }
-                    else{
 
                         Write-Host "Sorting $($_.Group.Count) frames at ($focalLength)mm with filter $filter"
 
@@ -115,9 +114,8 @@ Get-ChildItem $DropoffLocation *.xisf |
                             -MasterFlat $masterFlat `
                             -OutputPath $CalibratedOutput `
                             -PixInsightSlot 200 `
-                            -OutputPedestal 75 `
-                            -Verbose
-                    }
+                            -OutputPedestal 900
+                    
                 }
         }
     }

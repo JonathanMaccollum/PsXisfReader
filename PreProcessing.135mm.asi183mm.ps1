@@ -1,7 +1,7 @@
 import-module $PSScriptRoot/PsXisfReader.psd1 -Force
 
 $ErrorActionPreference="STOP"
-
+$WarningPreference="Continue"
 $DropoffLocation = "D:\Backups\Camera\Dropoff\NINA"
 $ArchiveDirectory="E:\Astrophotography"
 $CalibratedOutput = "E:\PixInsightLT\Calibrated"
@@ -10,7 +10,7 @@ Invoke-DarkFrameSorting `
     -DropoffLocation $DropoffLocation `
     -ArchiveDirectory $ArchiveDirectory `
     -PixInsightSlot 200 `
-    -Verbose
+    -Verbose 
 Invoke-DarkFlatFrameSorting `
     -DropoffLocation $DropoffLocation `
     -ArchiveDirectory $ArchiveDirectory `
@@ -54,7 +54,7 @@ $DarkLibrary=($DarkLibraryFiles|group-object Instrument,Gain,Offset,Exposure,Set
     $exposure=$_.Group[0].Exposure
     $setTemp=$_.Group[0].SetTemp
     
-    $dark=$_.Group | sort-object {(Get-Item $_.Path).LastModifiedDate} -Descending | select-object -First 1
+    $dark=$_.Group | sort-object {(Get-Item $_.Path).LastWriteTime} -Descending | select-object -First 1
     new-object psobject -Property @{
         Instrument=$instrument
         Gain=$gain
@@ -79,13 +79,15 @@ Get-ChildItem $DropoffLocation *.xisf |
         $offset=[decimal]$x.Offset
         $exposure=[decimal]$x.Exposure
         $setTemp=[decimal]$x.SetTemp
+        $ccdTemp=[decimal]$x.CCDTemp
         $masterDark = $DarkLibrary | where-object {
             $dark = $_
             ($dark.Instrument-eq $instrument) -and
             ($dark.Gain-eq $gain) -and
             ($dark.Offset-eq $offset) -and
             ($dark.Exposure-eq $exposure) -and
-            ($dark.SetTemp-eq $setTemp)
+            ([Math]::abs($dark.SetTemp - $ccdTemp) -lt 6)
+            #($dark.SetTemp-eq $setTemp)
         } | select-object -first 1
 
         if(-not $masterDark){
@@ -97,7 +99,7 @@ Get-ChildItem $DropoffLocation *.xisf |
                 foreach-object {
                     $filter = $_.Group[0].Filter
                     $focalLength=$_.Group[0].FocalLength
-                    $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20200620.MasterFlatCal.$filter.xisf"
+                    $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20210130.MasterFlatCal.$filter.xisf"
 
                     if(-not (test-path $masterFlat)) {
                         Write-Warning "Skipping $($_.Group.Count) frames at ($focalLength)mm with filter $filter. Reason: No master flat was found."

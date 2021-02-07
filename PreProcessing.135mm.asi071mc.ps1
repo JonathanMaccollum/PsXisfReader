@@ -72,7 +72,7 @@ Get-ChildItem $DropoffLocation *.xisf |
     Get-XisfFitsStats | 
     where-object Instrument -eq "ZWO ASI071MC Pro" |
     where-object ImageType -eq "LIGHT" |
-    where-object FocalLength -eq "1000" |
+    where-object FocalLength -eq "135" |
     group-object Instrument,SetTemp,Gain,Offset,Exposure |
     foreach-object {
         $lights = $_.Group
@@ -83,25 +83,27 @@ Get-ChildItem $DropoffLocation *.xisf |
         $offset=[decimal]$x.Offset
         $exposure=[decimal]$x.Exposure
         $ccdTemp=[decimal]$x.CCDTemp
+        $setTemp=[decimal]$x.SetTemp
         $masterDark = $DarkLibrary | where-object {
             $dark = $_
             ($dark.Instrument-eq $instrument) -and
             ($dark.Gain-eq $gain) -and
             ($dark.Offset-eq $offset) -and
             ($dark.Exposure-eq $exposure) -and
-            ([Math]::abs($dark.SetTemp - $ccdTemp) -lt 3)
+            (abs($dark.SetTemp - $setTemp) -lt 1)
+            #([Math]::abs($dark.SetTemp - $ccdTemp) -lt 3)
         } | select-object -first 1
 
         if(-not $masterDark){
-            Write-Warning "Unable to process $($lights.Count) images: No master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $ccdTemp"
+            Write-Warning "Unable to process $($lights.Count) images: No master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp"
         }else {
-            Write-Host "Master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $ccdTemp"
+            Write-Host "Master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp"
             $lights |
                 group-object Filter,FocalLength |
                 foreach-object {
                     $filter = $_.Group[0].Filter
                     $focalLength=$_.Group[0].FocalLength
-                    $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20210112.MasterFlatCal.$filter.xisf"
+                    $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20201115.MasterFlatCal.$filter.xisf"
 
                     if(-not (test-path $masterFlat)) {
                         Write-Warning "Skipping $($_.Group.Count) frames at ($focalLength)mm with filter $filter. Reason: No master flat was found."
@@ -116,7 +118,7 @@ Get-ChildItem $DropoffLocation *.xisf |
                             -MasterFlat $masterFlat `
                             -OutputPath $CalibratedOutput `
                             -PixInsightSlot 200 `
-                            -OutputPedestal 75
+                            -Verbose
                     }
                 }
         }

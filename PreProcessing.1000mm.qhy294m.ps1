@@ -5,6 +5,12 @@ $DropoffLocation = "D:\Backups\Camera\Dropoff\NINA"
 $ArchiveDirectory="E:\Astrophotography"
 $CalibratedOutput = "E:\PixInsightLT\Calibrated"
 
+Get-ChildItem $DropoffLocation "*.xisf" |
+    sort-object LastWriteTime -Descending |
+    foreach-object { Get-XisfFitsStats -Path $_ } |
+    where-object ImageType -eq "DARK" |
+    format-table Instrument,Filter,Gain,Offset,ImageType,CCDTemp,XPIXSZ,ObsDate,Geometry
+
 Invoke-DarkFrameSorting `
     -DropoffLocation $DropoffLocation `
     -ArchiveDirectory $ArchiveDirectory `
@@ -21,10 +27,8 @@ Invoke-FlatFrameSorting `
     -PixInsightSlot 200
 
 
-
-
 $DarkLibraryFiles =
-    Get-ChildItem "E:\Astrophotography\DarkLibrary\ZWO ASI071MC Pro" "*MasterDark.Gain*.Offset.*.*C*x*s.xisf" -File |
+    Get-ChildItem "E:\Astrophotography\DarkLibrary\QHYCCD-Cameras-Capture (ASCOM)" "*MasterDark.Gain*.Offset.*.*C*x*s.xisf" -File |
     Get-XisfFitsStats |
     % {
         # note: expecting file names with the pattern: "*MasterDark.Gain.___.Offset.___.-15C.__x__s.xisf"
@@ -70,43 +74,44 @@ $DarkLibrary=($DarkLibraryFiles|group-object Instrument,Gain,Offset,Exposure,Set
 
 Get-ChildItem $DropoffLocation *.xisf |
     Get-XisfFitsStats | 
-    where-object Instrument -eq "ZWO ASI071MC Pro" |
+    #where-object Instrument -eq "QHY294PROM" |
+    #where-object Instrument -eq "ZWO ASI183MM Pro" |
     where-object ImageType -eq "LIGHT" |
-    where-object FocalLength -eq "1000" |
-    group-object Instrument,SetTemp,Gain,Offset,Exposure |
+    group-object Instrument,SetTemp,Gain,Offset,Exposure,Geometry |
     foreach-object {
         $lights = $_.Group
         $x=$lights[0]
 
         $instrument=$x.Instrument
+        $geometry=$x.Geometry
         $gain=[decimal]$x.Gain
         $offset=[decimal]$x.Offset
         $exposure=[decimal]$x.Exposure
-        $ccdTemp=[decimal]$x.CCDTemp
+        $setTemp=[decimal]$x.SetTemp
         $masterDark = $DarkLibrary | where-object {
             $dark = $_
             ($dark.Instrument-eq $instrument) -and
             ($dark.Gain-eq $gain) -and
             ($dark.Offset-eq $offset) -and
             ($dark.Exposure-eq $exposure) -and
-            ([Math]::abs($dark.SetTemp - $ccdTemp) -lt 3)
+            #($dark.Geometry-eq $geometry) -and
+            ($dark.SetTemp-eq $setTemp)
         } | select-object -first 1
 
         if(-not $masterDark){
-            Write-Warning "Unable to process $($lights.Count) images: No master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $ccdTemp"
+            Write-Warning "Unable to process $($lights.Count) images: No master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp"
         }else {
-            Write-Host "Master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $ccdTemp"
+            Write-Host "Master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp"
             $lights |
                 group-object Filter,FocalLength |
                 foreach-object {
                     $filter = $_.Group[0].Filter
                     $focalLength=$_.Group[0].FocalLength
-                    $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20210112.MasterFlatCal.$filter.xisf"
+                    $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20201226.MasterFlatCal.$filter.xisf"
 
                     if(-not (test-path $masterFlat)) {
-                        Write-Warning "Skipping $($_.Group.Count) frames at ($focalLength)mm with filter $filter. Reason: No master flat was found."
+                        Write-Warning "Calibrating $($_.Group.Count) frames at ($focalLength)mm with filter $filter without flats. Reason: No master flat was found."
                     }
-                    else{
 
                         Write-Host "Sorting $($_.Group.Count) frames at ($focalLength)mm with filter $filter"
 
@@ -116,8 +121,8 @@ Get-ChildItem $DropoffLocation *.xisf |
                             -MasterFlat $masterFlat `
                             -OutputPath $CalibratedOutput `
                             -PixInsightSlot 200 `
-                            -OutputPedestal 75
-                    }
+                            -OutputPedestal 900 -KeepOpen
+                    
                 }
         }
     }
