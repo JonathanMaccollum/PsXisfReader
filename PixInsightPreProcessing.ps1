@@ -1190,7 +1190,8 @@ Function Invoke-PiLightIntegration
         [Parameter(Mandatory=$false)][string]$Rejection = "LinearFit", #Rejection_ESD
         [Parameter(Mandatory=$false)][string]$Normalization = "AdditiveWithScaling", #AdaptiveNormalization
         [Parameter(Mandatory=$false)][string]$RejectionNormalization = "Scale", #AdaptiveRejectionNormalization
-        [Parameter(Mandatory=$false)][Switch]$GenerateDrizzleData
+        [Parameter(Mandatory=$false)][Switch]$GenerateDrizzleData,
+        [Parameter(Mandatory=$false)][string]$WeightKeyword = "SSWEIGHT"
     )
     $ImageDefinition = [string]::Join("`r`n   , ",
     ($Images | ForEach-Object {
@@ -1198,12 +1199,16 @@ Function Invoke-PiLightIntegration
         $y=if($GenerateDrizzleData.IsPresent){$x.Replace(".xisf",".xdrz")}else{""}
         "[true, ""$x"", ""$y"", """"]"
     }))
+    $weightMode = "KeywordWeight"
+    if([string]::IsNullOrWhiteSpace($WeightKeyword)){
+        $weightMode="NoiseEvaluation"
+    }
     $IntegrationDefinition = 
     "var P = new ImageIntegration;
     P.inputHints = `"`";
     P.combination = ImageIntegration.prototype.Average;
-    P.weightMode = ImageIntegration.prototype.KeywordWeight;
-    P.weightKeyword = ""SSWEIGHT"";
+    P.weightMode = ImageIntegration.prototype.$weightMode;
+    P.weightKeyword = ""$WeightKeyword"";
     P.weightScale = ImageIntegration.prototype.WeightScale_IKSS;
     P.ignoreNoiseKeywords = false;
     P.normalization = ImageIntegration.prototype.$Normalization;
@@ -1317,38 +1322,59 @@ class XisfPreprocessingState {
         if($this.Aligned){
             $drizzle = $this.Aligned.FullName.Replace(
                 $this.Aligned.Extension,
-                "xdrz")
+                ".xdrz")
             return [System.IO.FileInfo]::new($drizzle)
         }
         return $null
     }
     [void]RemoveCorrectedFiles() {
         if($this.Corrected -and $this.Corrected.Exists){
-            $this.Corrected.Delete()
-            $this.Corrected.Refresh()
+            if($this.Corrected -ne $this.Calibrated) {
+                Write-Verbose "Removing file $($this.Corrected.FullName)"
+                $this.Corrected.Delete()
+                $this.Corrected.Refresh()
+            }
         }
     }
     [void]RemoveDebayeredFiles() {
         if($this.Debayered -and $this.Debayered.Exists){
-            $this.Debayered.Delete()
-            $this.Debayered.Refresh()
+            if($this.Debayered -ne $this.Corrected) {
+                if($this.Debayered -ne $this.Calibrated) {
+                    Write-Verbose "Removing file $($this.Debayered.FullName)"
+                    $this.Debayered.Delete()
+                    $this.Debayered.Refresh()
+                }
+            }
         }
     }
     [void]RemoveWeightedFiles() {
         if($this.Weighted -and $this.Weighted.Exists){
-            $this.Weighted.Delete()
-            $this.Weighted.Refresh()
+            if($this.Weighted -ne $this.Debayered)
+            {
+                if($this.Weighted -ne $this.Calibrated) {
+                    Write-Verbose "Removing file $($this.Weighted.FullName)"
+                    $this.Weighted.Delete()
+                    $this.Weighted.Refresh()
+                }
+            }
         }
     }
     [void]RemoveAlignedAndDrizzleFiles() {
         $drizzle = $this.GetDrizzleFile()
         if($drizzle -and $drizzle.Exists)
         {
+            Write-Verbose "Removing file $($drizzle.FullName)"
             $drizzle.Delete()
         }
         if($this.Aligned -and $this.Aligned.Exists){
-            $this.Aligned.Delete()
-            $this.Aligned.Refresh()
+            if($this.Aligned -ne $this.Weighted)
+            {
+                if($this.Aligned -ne $this.Calibrated) {
+                    Write-Verbose "Removing file $($this.Aligned.FullName)"
+                    $this.Aligned.Delete()
+                    $this.Aligned.Refresh()
+                }
+            }
         }
     }
 }
@@ -1915,7 +1941,9 @@ Function Invoke-XisfPostCalibrationMonochromeImageWorkflow
         [Parameter()][System.IO.FileInfo]$AlignmentReference,
         [Parameter(Mandatory)][System.IO.DirectoryInfo]$DarkLibraryPath,
         [Switch]$RerunCosmeticCorrection,
+        [Switch]$SkipCosmeticCorrection,
         [Switch]$RerunWeighting,
+        [Switch]$SkipWeighting,
         [Switch]$RerunAlignment,
         [int]$PixInsightSlot,
         [string]$ApprovalExpression,
@@ -1939,8 +1967,13 @@ Function Invoke-XisfPostCalibrationMonochromeImageWorkflow
         Get-XisfCosmeticCorrectionState -CosmeticCorrectionPath $CorrectedOutputPath |
         foreach-object {
             $x = $_
-            if($RerunCosmeticCorrection) {
-                $x.RemoveCorrectedFiles()
+            if($SkipCosmeticCorrection){
+                $x.Corrected=$x.Calibrated
+            }
+            else{
+                if($RerunCosmeticCorrection) {
+                    $x.RemoveCorrectedFiles()
+                }
             }
             $x
         } |
@@ -1980,8 +2013,13 @@ Function Invoke-XisfPostCalibrationMonochromeImageWorkflow
         Get-XisfSubframeSelectorState -SubframeSelectorPath $WeightedOutputPath |
         foreach-object {
             $x = $_
-            if($RerunWeighting -or $RerunCosmeticCorrection) {
-                $x.RemoveWeightedFiles()
+            if($SkipWeighting){
+                $x.Weighted=$x.Corrected
+            }
+            else{
+                if($RerunWeighting -or $RerunCosmeticCorrection) {
+                    $x.RemoveWeightedFiles()
+                }
             }
             $x
         } |
@@ -2092,6 +2130,10 @@ Function Invoke-XisfPostCalibrationMonochromeImageWorkflow
                         foreach-object {
                             write-host "$($_.Filter): $($_.Exposure)"
                         }
+                        $weightKeyword="SSWEIGHT"
+                        if($SkipWeighting){
+                            $weightKeyword=$null
+                        }
                         try {
                         Invoke-PiLightIntegration `
                             -Images ($toStack|foreach-object {$_.Path}) `
@@ -2101,7 +2143,8 @@ Function Invoke-XisfPostCalibrationMonochromeImageWorkflow
                             -LinearFitLow 5 `
                             -LinearFitHigh 4 `
                             -PixInsightSlot $PixInsightSlot `
-                            -GenerateDrizzleData:$GenerateDrizzleData
+                            -GenerateDrizzleData:$GenerateDrizzleData `
+                            -WeightKeyword:$weightKeyword
                         }
                         catch {
                             write-warning $_.ToString()
