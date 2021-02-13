@@ -687,14 +687,16 @@ Function Get-XisfLightFrames{
         [Parameter()][Switch]$UseCache,
         [Parameter()][Switch]$SkipOnError,
         [Parameter()][string[]]$PathTokensToIgnore,
-        [Parameter()][Switch]$NoProgress
+        [Parameter()][Switch]$ShowProgress
     )
     begin
     {        
         if($UseCache.IsPresent){
             $PathToCache= Join-Path ($Path.FullName) "Cache.clixml"
             if(Test-Path $PathToCache){
-                $cache = Import-Clixml -Path $PathToCache
+                $cache = Import-Clixml -Path $PathToCache | 
+                    where-object XPIXSZ -ne 0 |
+                    where-object XPIXSZ -ne $null
             }
             else {
                 $cache = new-object hashtable
@@ -717,36 +719,36 @@ Function Get-XisfLightFrames{
                 }
             }
         }
-        if($UseCache -and ($cache.Count) -ne $entriesBefore){
+        if($UseCache){
             $cache|Export-Clixml -Path $PathToCache -Force
         }
         if($Recurse.IsPresent)
         {
             $directories = Get-ChildItem -Path $Path -Directory
             if($directories){
-            $i=0;
-            $maxi = $directories.Length
-            $directories| ForEach-Object {
-                if(-not $NoProgress){
-                    Write-Progress -PercentComplete (100.0*$i/$maxi) -Activity "Scanning Directories $($Path.Name)" -Status ($_.Name)
-                }
-                Get-XisfLightFrames `
-                    -Recurse `
-                    -Path $_ `
-                    -UseCache:$UseCache `
-                    -SkipOnError:$SkipOnError `
-                    -PathTokensToIgnore:$PathTokensToIgnore `
-                    -NoProgress
-                $i+=1
-                if($i -eq $maxi){
-                    if(-not $NoProgress){
-                        Write-Progress -PercentComplete 100 -Activity "Scanning Directories" -Status ($_.Name)
+                $i=0;
+                $maxi = $directories.Length
+                $directories| ForEach-Object {
+                    if($ShowProgress){
+                        Write-Progress -PercentComplete (100.0*$i/$maxi) -Activity "Scanning Directories $($Path.Name)" -Status ($_.Name) -Id $_.GetHashCode() -ParentId $Path.GetHashCode()
+                    }
+                    Get-XisfLightFrames `
+                        -Recurse `
+                        -Path $_ `
+                        -UseCache:$UseCache `
+                        -SkipOnError:$SkipOnError `
+                        -PathTokensToIgnore:$PathTokensToIgnore `
+                        -ShowProgress:$ShowProgress
+                    $i+=1
+                    if($i -eq $maxi){
+                        if($ShowProgress){
+                            Write-Progress -PercentComplete 100 -Activity "Scanning Directories" -Status ($_.Name) -Id $_.GetHashCode() -ParentId $Path.GetHashCode()
+                        }
                     }
                 }
             }
         }
     }
-}
 }
 Function Get-XisfDarkFrames{
     [CmdletBinding()]

@@ -68,6 +68,14 @@ class XisfFileStats {
         return [bool]($this.History)
     }
 }
+Function Get-XisfImageScale
+{
+    [CmdletBinding()]
+    param(
+        [Parameter(ValueFromPipeline=$true,Mandatory=$true)]$Stats
+    )
+    Write-Output (206.265*$Stats.XPIXSZ/$Stats.FocalLength)
+}
 Function Get-XisfFitsStats
 {
     [CmdletBinding()]
