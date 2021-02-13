@@ -83,7 +83,8 @@ Function Get-XisfFitsStats
     param
     (
         [Parameter(ValueFromPipeline=$true,Mandatory=$true)][System.IO.FileInfo]$Path,
-        [Parameter(ValueFromPipeline=$false)][Hashtable]$Cache
+        [Parameter(ValueFromPipeline=$false)][Hashtable]$Cache,
+        [Parameter(ValueFromPipeline=$false)][Hashtable]$ErrorCache
     )
     process{            
         if($Cache -and $Cache.ContainsKey($Path.FullName))
@@ -113,6 +114,9 @@ Function Get-XisfFitsStats
                 YPIXSZ=$result.YPIXSZ
                 Geometry=$result.Geometry
             })
+        }
+        elseif($ErrorCache -and $ErrorCache.ContainsKey($Path.FullName)){
+            Write-Verbose "Skipping file $($Path.FullName) due to previously encountered error."
         }
         else
         {
@@ -167,10 +171,16 @@ Function Get-XisfFitsStats
             catch [System.Xml.XmlException]{
                 Write-Warning ("An error occured reading the file "+($Path.FullName))
                 Write-Verbose $_.Exception.ToString()
+                if($ErrorCache){
+                    $ErrorCache.Add($Path.FullName,$_.Exception)
+                }
             }
             catch {
                 Write-Warning "An unexpected error occured processing file $($Path.FullName)"
                 Write-Warning $_.Exception.ToString()
+                if($ErrorCache){
+                    $ErrorCache.Add($Path.FullName, $_.Exception)
+                }
                 throw
             }
             finally

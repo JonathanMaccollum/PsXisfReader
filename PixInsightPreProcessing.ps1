@@ -685,6 +685,7 @@ Function Get-XisfLightFrames{
         [Parameter(Mandatory)][System.IO.DirectoryInfo]$Path,
         [Parameter()][Switch]$Recurse,
         [Parameter()][Switch]$UseCache,
+        [Parameter()][Switch]$UseErrorCache,
         [Parameter()][Switch]$SkipOnError,
         [Parameter()][string[]]$PathTokensToIgnore,
         [Parameter()][Switch]$ShowProgress
@@ -694,14 +695,22 @@ Function Get-XisfLightFrames{
         if($UseCache.IsPresent){
             $PathToCache= Join-Path ($Path.FullName) "Cache.clixml"
             if(Test-Path $PathToCache){
-                $cache = Import-Clixml -Path $PathToCache | 
-                    where-object XPIXSZ -ne 0 |
-                    where-object XPIXSZ -ne $null
+                $cache = Import-Clixml -Path $PathToCache
             }
             else {
                 $cache = new-object hashtable
             }
-            $entriesBefore=$cache.Count    
+            $entriesBefore=$cache.Count
+        }
+        if($UseErrorCache.IsPresent){
+            $PathToErrorCache= Join-Path ($Path.FullName) "ErrorCache.clixml"
+            if(Test-Path $PathToErrorCache){
+                $errorCache = Import-Clixml -Path $PathToErrorCache
+            }
+            else {
+                $errorCache = new-object hashtable
+            }
+            $errorEntriesBefore=$errorCache.Count
         }
     }
     process
@@ -711,7 +720,7 @@ Function Get-XisfLightFrames{
         foreach-object {
             $file=$_
             try{
-                $file|Get-XisfFitsStats -Cache:$cache |where-object ImageType -eq "LIGHT"
+                $file|Get-XisfFitsStats -Cache:$cache -ErrorCache:$errorCache |where-object ImageType -eq "LIGHT"
             }
             catch{
                 if(-not ($SkipOnError.IsPresent)){
@@ -719,8 +728,11 @@ Function Get-XisfLightFrames{
                 }
             }
         }
-        if($UseCache){
-            $cache|Export-Clixml -Path $PathToCache -Force
+        if($UseCache -and ($entriesBefore -ne $cache.Count)){
+            $cache|Export-Clixml -Path $PathToCache -Force -Depth 3
+        }
+        if($UseErrorCache -and ($errorEntriesBefore -ne $errorCache.Count)){
+            $errorCache|Export-Clixml -Path $PathToErrorCache -Force -Depth 3
         }
         if($Recurse.IsPresent)
         {
@@ -736,6 +748,7 @@ Function Get-XisfLightFrames{
                         -Recurse `
                         -Path $_ `
                         -UseCache:$UseCache `
+                        -UseErrorCache:$UseErrorCache `
                         -SkipOnError:$SkipOnError `
                         -PathTokensToIgnore:$PathTokensToIgnore `
                         -ShowProgress:$ShowProgress
