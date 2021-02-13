@@ -1,4 +1,4 @@
-﻿[Reflection.Assembly]::Load("System.Text.RegularExpressions") >>$null
+[Reflection.Assembly]::Load("System.Text.RegularExpressions") >>$null
 Function Wait-PixInsightInstance([int]$PixInsightSlot)
 {
     [CmdletBinding]
@@ -655,14 +655,39 @@ Function Get-XisfFile{
         Get-XisfFitsStats
     
 }
-
+Function Skip-PathsContainingTokens{
+    [CmdletBinding()]
+    param (
+        [Parameter(ValueFromPipeline=$true,Mandatory)][System.IO.FileInfo]$Path,
+        [Parameter(ValueFromPipeline=$false)][string[]]$PathTokensToIgnore
+    )
+    process{
+        if(-not $PathTokensToIgnore){
+            Write-Output $Path
+        }
+        else{
+            $hasToken=$false
+            foreach( $x in $PathTokensToIgnore) {
+                if($Path.FullName.ToLower().Contains($x.ToLower())){
+                    $hasToken=$true
+                    break;
+                }
+            }
+            if(-not $hasToken){
+                Write-Output $Path
+            }
+        }    
+    }
+}
 Function Get-XisfLightFrames{
     [CmdletBinding()]
     param (
         [Parameter(Mandatory)][System.IO.DirectoryInfo]$Path,
         [Parameter()][Switch]$Recurse,
         [Parameter()][Switch]$UseCache,
-        [Parameter()][Switch]$SkipOnError
+        [Parameter()][Switch]$SkipOnError,
+        [Parameter()][string[]]$PathTokensToIgnore,
+        [Parameter()][Switch]$NoProgress
     )
     begin
     {        
@@ -680,6 +705,7 @@ Function Get-XisfLightFrames{
     process
     {
         Get-ChildItem -Path $Path -File -Filter *.xisf |
+        Skip-PathsContainingTokens -PathTokensToIgnore $PathTokensToIgnore |
         foreach-object {
             $file=$_
             try{
@@ -696,11 +722,31 @@ Function Get-XisfLightFrames{
         }
         if($Recurse.IsPresent)
         {
-            Get-ChildItem -Path $Path -Directory | ForEach-Object {
-                Get-XisfLightFrames -Recurse -Path $_ -UseCache:$UseCache -SkipOnError:$SkipOnError
+            $directories = Get-ChildItem -Path $Path -Directory
+            if($directories){
+            $i=0;
+            $maxi = $directories.Length
+            $directories| ForEach-Object {
+                if(-not $NoProgress){
+                    Write-Progress -PercentComplete (100.0*$i/$maxi) -Activity "Scanning Directories $($Path.Name)" -Status ($_.Name)
+                }
+                Get-XisfLightFrames `
+                    -Recurse `
+                    -Path $_ `
+                    -UseCache:$UseCache `
+                    -SkipOnError:$SkipOnError `
+                    -PathTokensToIgnore:$PathTokensToIgnore `
+                    -NoProgress
+                $i+=1
+                if($i -eq $maxi){
+                    if(-not $NoProgress){
+                        Write-Progress -PercentComplete 100 -Activity "Scanning Directories" -Status ($_.Name)
+                    }
+                }
             }
         }
     }
+}
 }
 Function Get-XisfDarkFrames{
     [CmdletBinding()]
