@@ -1,4 +1,4 @@
-[Reflection.Assembly]::Load("System.Text.RegularExpressions") >>$null
+﻿[Reflection.Assembly]::Load("System.Text.RegularExpressions") >>$null
 Function Wait-PixInsightInstance([int]$PixInsightSlot)
 {
     [CmdletBinding]
@@ -371,13 +371,31 @@ Function Invoke-PiLightCalibration
     param (
         [Parameter(Mandatory=$true)][int]$PixInsightSlot,
         [Parameter(Mandatory=$true)][System.IO.FileInfo[]]$Images,
-        [Parameter(Mandatory=$true)][System.IO.FileInfo]$MasterDark,
+        [Parameter(Mandatory=$false)][System.IO.FileInfo]$MasterBias,
+        [Parameter(Mandatory=$false)][System.IO.FileInfo]$MasterDark,
         [Parameter(Mandatory=$false)][System.IO.FileInfo]$MasterFlat,
         [Parameter(Mandatory=$true)][System.IO.DirectoryInfo]$OutputPath,
         [Parameter(Mandatory=$false)][Switch]$KeepOpen,
         [Parameter()][int]$OutputPedestal=0
     )
-    $masterDarkPath = Get-Item $MasterDark | Format-PiPath
+    if($MasterBias -and (Test-Path $MasterBias)){
+        $masterBiasPath = Get-Item $MasterBias | Format-PiPath
+        $masterBiasEnabled = "true"
+    }
+    else{
+        $masterBiasPath=""
+        $masterBiasEnabled = "false"
+    }
+    
+    if($MasterDark -and (Test-Path $MasterDark)){
+        $masterDarkPath = Get-Item $MasterDark | Format-PiPath
+        $masterDarkEnabled = "true"
+    }
+    else{
+        $masterDarkPath=""
+        $masterDarkEnabled = "false"
+    }
+    
     if($MasterFlat -and (Test-Path $MasterFlat)){
         $masterFlatPath = Get-Item $MasterFlat | Format-PiPath
         $masterFlatEnabled = "true"
@@ -386,6 +404,7 @@ Function Invoke-PiLightCalibration
         $masterFlatPath=""
         $masterFlatEnabled = "false"
     }
+
     if(-not ($OutputPath.Exists)){
         $OutputPath.Create()
     }
@@ -399,8 +418,9 @@ Function Invoke-PiLightCalibration
     "var P = new ImageCalibration;
 P.pedestal = 0;
 P.pedestalMode = ImageCalibration.prototype.Keyword;
-P.masterBiasEnabled = false;
-P.masterDarkEnabled = true;
+P.masterBiasEnabled = $masterBiasEnabled;
+P.masterBiasPath = `"$masterBiasPath`";
+P.masterDarkEnabled = $masterDarkEnabled;
 P.masterDarkPath = `"$masterDarkPath`";
 P.masterFlatEnabled = $masterFlatEnabled;
 P.masterFlatPath = `"$masterFlatPath`";
@@ -556,6 +576,55 @@ Function Invoke-PiDebayer
     }
     finally {
         Remove-Item $executionScript -Force
+    }
+}
+
+Function Invoke-BiasFrameSorting
+{
+    [CmdletBinding()]
+    param (
+        [System.IO.DirectoryInfo]$DropoffLocation,
+        [System.IO.DirectoryInfo]$ArchiveDirectory,
+        [int]$PixInsightSlot,
+        [Switch]$KeepOpen,
+        [Switch]$DoNotArchive
+    )
+
+    Get-ChildItem $DropoffLocation "*.xisf" |
+    foreach-object { Get-XisfFitsStats -Path $_ } |
+    where-object ImageType -eq "BIAS" |
+    group-object Instrument,Exposure,Gain,Offset,Geometry |
+    foreach-object {
+        $images=$_.Group
+        
+        $instrument=$images[0].Instrument.Trim().Trim("'")
+        $exposure=$images[0].Exposure.ToString().Trim()
+        $gain=($images[0].Gain)
+        $offset=($images[0].Offset)
+        $date = ([DateTime]$images[0].LocalDate).Date.ToString('yyyyMMdd')
+        $targetDirectory = "$ArchiveDirectory\BiasLibrary\$instrument"
+        [System.IO.Directory]::CreateDirectory($targetDirectory)>>$null
+        $masterDark = "$targetDirectory\$($date).MasterBias.Gain.$($gain).Offset.$($offset).$($images.Count)x$($exposure)s.xisf"
+        if($images.Count -lt 10){
+            Write-Warning "Skipping $($images.Count) Bias for $instrument Gain $gain Offset $offset duration $($exposure)s: Need more than 10 subs for making a bias master."
+        }
+        elseif(-not (Test-Path $masterDark)) {
+            Write-Host "Integrating $($images.Count) Bias for $instrument Gain $gain Offset $offset duration $($exposure)s"
+            $darkFlats = $images | foreach-object {$_.Path}
+            Invoke-PiDarkIntegration `
+                -Images $darkFlats `
+                -PixInsightSlot $PixInsightSlot `
+                -OutputFile $masterDark `
+                -KeepOpen:$KeepOpen
+                    
+            if(-not $DoNotArchive){
+                $destinationDirectory=join-path $targetDirectory $date
+                [System.IO.Directory]::CreateDirectory($destinationDirectory)>>$null
+                $images | Foreach-Object {
+                    Move-Item -Path $_.Path -Destination $destinationDirectory
+                }
+            }
+        }
     }
 }
 
@@ -912,8 +981,8 @@ Function Invoke-LightFrameSorting
         [Parameter(Mandatory,ParameterSetName="ByDirectory")][int]$Gain,
         [Parameter(Mandatory,ParameterSetName="ByDirectory")][int]$Offset,
         [Parameter(Mandatory,ParameterSetName="ByDirectory")][int]$SetTemp,
-
-        [Parameter(Mandatory)][System.IO.FileInfo]$MasterDark,
+        [Parameter()][System.IO.FileInfo]$MasterBias,
+        [Parameter()][System.IO.FileInfo]$MasterDark,
         [Parameter()][System.IO.FileInfo]$MasterFlat,
         [Parameter(Mandatory)][System.IO.DirectoryInfo]$OutputPath,
 
@@ -960,6 +1029,7 @@ Function Invoke-LightFrameSorting
             Write-Host "Calibrating $($toCalibrate.Count)x$($Exposure)s $Filter Frames for target $object"
             Invoke-PiLightCalibration `
                 -Images $toCalibrate `
+                -MasterBias $MasterBias `
                 -MasterDark $MasterDark `
                 -MasterFlat $MasterFlat `
                 -OutputPath $OutputDirPerObject `
@@ -1819,6 +1889,9 @@ Function Invoke-XisfPostCalibrationColorImageWorkflow
                     
                     $masterDarkFileName = $_.Name
                     $masterDark = get-childitem $DarkLibraryPath *.xisf -Recurse | where-object {$_.Name -eq $masterDarkFileName} | Select-Object -First 1
+                    #if(-not $masterDark){
+                    #    $masterDark = get-childitem $DarkLibraryPath *.xisf -Recurse | where-object {$_.Name.StartsWith($masterDarkFileName)} | Select-Object -First 1
+                    #}
                     $images = $_.Group
                     Write-Host "Correcting $($images.Count) Images"
                     if(-not $masterDark) {
