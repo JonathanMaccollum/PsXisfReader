@@ -2120,7 +2120,18 @@ Function Invoke-XisfPostCalibrationMonochromeImageWorkflow
         [int]$PixInsightSlot,
         [string]$ApprovalExpression,
         [string]$WeightingExpression,
-        [switch]$GenerateDrizzleData
+        [switch]$GenerateDrizzleData,
+
+        [Parameter(Mandatory=$false)][decimal]$ClampingThreshold=0.3,        
+        [ValidateSet("Auto","Lanczos3","Lanczos4","Bilinear","CubicBSplineFilter","MitchellNetravaliFilter","CatmullRomSplineFilter")]
+        [Parameter(Mandatory=$false)][String]$Interpolation="Auto",
+
+        [Parameter(Mandatory=$false)][decimal]$LinearFitLow=8,
+        [Parameter(Mandatory=$false)][decimal]$LinearFitHigh=7,
+        [Parameter(Mandatory=$false)][string]$Rejection = "LinearFit", #Rejection_ESD
+        [Parameter(Mandatory=$false)][string]$Normalization = "AdditiveWithScaling", #AdaptiveNormalization
+        [Parameter(Mandatory=$false)][string]$RejectionNormalization = "Scale" #AdaptiveRejectionNormalization
+
     )
     $RawSubs |
         Get-XisfCalibrationState `
@@ -2259,8 +2270,8 @@ Function Invoke-XisfPostCalibrationMonochromeImageWorkflow
                         -Images ($approved.Path) `
                         -ReferencePath ($reference) `
                         -OutputPath $AlignedOutputPath `
-                        -Interpolation Lanczos4 `
-                        -ClampingThreshold 0.2
+                        -Interpolation:$Interpolation `
+                        -ClampingThreshold:$ClampingThreshold
                     $group |
                         Get-XisfAlignedState `
                             -AlignedPath $AlignedOutputPath
@@ -2301,8 +2312,16 @@ Function Invoke-XisfPostCalibrationMonochromeImageWorkflow
                     if($SkipWeighting){
                         $outputFileName+=".noweights"
                     }
-
-                    $outputFileName+=".ESD.xisf"
+                    if($Rejection -eq "LinearFit"){
+                        $outputFileName+=".LF.xisf"
+                    }
+                    elseif($Rejection -eq "Rejection_ESD"){
+                        $outputFileName+=".ESD.xisf"
+                    }
+                    else{
+                        $outputFileName+=".$Rejection.xisf"
+                    }
+                    
                     $outputFile = Join-Path ($IntegratedImageOutputDirectory.FullName) $outputFileName
                     if(-not (test-path $outputFile)) {
                         write-host ("Integrating  "+ $outputFileName)
@@ -2322,9 +2341,11 @@ Function Invoke-XisfPostCalibrationMonochromeImageWorkflow
                             -Images ($toStack|foreach-object {$_.Path}) `
                             -OutputFile $outputFile `
                             -KeepOpen `
-                            -Rejection "Rejection_ESD" `
-                            -LinearFitLow 5 `
-                            -LinearFitHigh 4 `
+                            -Rejection:$Rejection `
+                            -Normalization:$Normalization `
+                            -RejectionNormalization:$RejectionNormalization `
+                            -LinearFitLow:$LinearFitLow `
+                            -LinearFitHigh:$LinearFitHigh `
                             -PixInsightSlot $PixInsightSlot `
                             -GenerateDrizzleData:$GenerateDrizzleData `
                             -WeightKeyword:$weightKeyword
