@@ -10,7 +10,7 @@ Function Wait-PixInsightInstance([int]$PixInsightSlot)
     if($x) {
         Add-Member -MemberType NoteProperty -Name "PixInsightSlot" -Value $PixInsightSlot -InputObject $x
         while(-not $x.WaitForExit(1000)){
-            Write-Verbose "Waiting for PixInsight slot $PixInsightSlot to exit."
+            Write-Debug "Waiting for PixInsight slot $PixInsightSlot to exit."
         }
     }
     $x
@@ -40,12 +40,13 @@ Function Start-PixInsight
             "--no-startup-scripts"
             "--no-startup-check-updates",
             "--no-startup-gui-messages",
+            "--automation-mode",
             "--no-splash -n=$PixInsightSlot"
         );
         Start-Process ".\pixinsight.exe" -PassThru -ArgumentList $arguments >> $null
         while(-not (Get-PixInsightInstance -PixInsightSlot $PixInsightSlot))
         {
-            Write-Verbose "Waiting for PixInsight to start slot $PixInsightSlot"
+            Write-Debug "Waiting for PixInsight to start slot $PixInsightSlot"
             Wait-Event -Timeout 4            
         }
     }
@@ -78,9 +79,10 @@ Function Invoke-PixInsightScript
             $arguments+="--force-exit"
         }
         Start-Process ".\pixinsight.exe" -PassThru -ArgumentList $arguments >> $null
+        Write-Verbose "Waiting for PixInsight to start slot $PixInsightSlot"
         while(-not (Get-PixInsightInstance -PixInsightSlot $PixInsightSlot))
         {
-            Write-Verbose "Waiting for PixInsight to start slot $PixInsightSlot"
+            Write-Debug "Waiting for PixInsight to start slot $PixInsightSlot"
             Wait-Event -Timeout 4            
         }
         Write-Verbose "Waiting for completion of slot $PixInsightSlot"
@@ -129,9 +131,9 @@ save integration -p=`"$output`" --nodialog --nomessages --noverify"
     try {
         Write-Debug "Invoking Script $(Get-Content $Path)"
         Invoke-PixInsightScript `
-        -PixInsightSlot $PixInsightSlot `
-        -Path $ScriptToRun `
-        -KeepOpen:$KeepOpen
+            -PixInsightSlot $PixInsightSlot `
+            -Path $ScriptToRun `
+            -KeepOpen:$KeepOpen
 
         $OutputFile.Refresh()
         if($OutputFile.Exists) {
@@ -161,9 +163,9 @@ Function Invoke-PICalibrationScript
     $Template|Out-File $ScriptToRun -Force
     try {
         Invoke-PixInsightScript `
-        -PixInsightSlot $PixInsightSlot `
-        -Path $ScriptToRun `
-        -KeepOpen:$KeepOpen
+            -PixInsightSlot $PixInsightSlot `
+            -Path $ScriptToRun `
+            -KeepOpen:$KeepOpen
     }
     finally {
         Remove-Item $ScriptToRun -Force
@@ -373,6 +375,8 @@ Function Invoke-PiLightCalibration
         [Parameter(Mandatory=$true)][System.IO.FileInfo[]]$Images,
         [Parameter(Mandatory=$false)][System.IO.FileInfo]$MasterBias,
         [Parameter(Mandatory=$false)][System.IO.FileInfo]$MasterDark,
+        [Parameter(Mandatory=$false)][Switch]$CalibrateDark,
+        [Parameter(Mandatory=$false)][Switch]$OptimizeDark,
         [Parameter(Mandatory=$false)][System.IO.FileInfo]$MasterFlat,
         [Parameter(Mandatory=$true)][System.IO.DirectoryInfo]$OutputPath,
         [Parameter(Mandatory=$false)][Switch]$KeepOpen,
@@ -425,9 +429,9 @@ P.masterDarkPath = `"$masterDarkPath`";
 P.masterFlatEnabled = $masterFlatEnabled;
 P.masterFlatPath = `"$masterFlatPath`";
 P.calibrateBias = false;
-P.calibrateDark = false;
+P.calibrateDark = $($CalibrateDark.IsPresent.ToString().ToLower());
 P.calibrateFlat = false;
-P.optimizeDarks = false;
+P.optimizeDarks = $($OptimizeDark.IsPresent.ToString().ToLower());
 P.darkOptimizationThreshold = 0.00000;
 P.darkOptimizationLow = 3.0000;
 P.darkOptimizationWindow = 1024;
@@ -466,19 +470,32 @@ Function Invoke-PiCosmeticCorrection
     param (
         [Parameter(Mandatory=$true)][int]$PixInsightSlot,
         [Parameter(Mandatory=$true)][System.IO.FileInfo[]]$Images,
-        [Parameter(Mandatory=$true)][System.IO.FileInfo]$MasterDark,
+        [Parameter(Mandatory=$false)][System.IO.FileInfo]$MasterDark,
         [Parameter(Mandatory=$true)][System.IO.DirectoryInfo]$OutputPath,
         [Parameter(Mandatory=$false)][Switch]$KeepOpen,
         [Parameter()][Switch]$CFAImages,
-        [Parameter(Mandatory=$false)][double]$HotDarkLevel=0.666666
+        [Parameter(Mandatory=$false)][double]$HotDarkLevel=0.666666,
+
+        [Parameter()][Switch]$UseAutoHot,
+        [Parameter(Mandatory=$false)][double]$HotAutoSigma=3.0,
+        [Parameter()][Switch]$UseAutoCold,
+        [Parameter(Mandatory=$false)][double]$ColdAutoSigma=3.0
     )
-    $masterDarkPath = Get-Item $MasterDark | Format-PiPath
+    if($MasterDark){
+        $masterDarkPath = Get-Item $MasterDark | Format-PiPath
+        $useMasterDark="true"
+    }
+    else{
+        $masterDarkPath=""
+        $useMasterDark="false"
+    }
     $outputDirectory = Get-Item ($OutputPath.FullName) | Format-PiPath
     $ImageDefinition = [string]::Join("`r`n   , ",
     ($Images | ForEach-Object {
         $x=$_|Format-PiPath
         "[true, ""$x""]"
     }))
+    $useAutoDetect = (($UseAutoHot.IsPresent) -or ($UseAutoCold.IsPresent))
     $IntegrationDefinition = 
     "var P = new CosmeticCorrection;
 P.useMasterDark = true;
@@ -490,16 +507,16 @@ P.postfix = `"_cc`";
 P.overwrite = false;
 P.amount = 1.00;
 P.cfa = $($CFAImages.IsPresent.ToString().ToLower());
-P.useMasterDark = true;
-P.hotDarkCheck = true;
+P.useMasterDark = $useMasterDark;
+P.hotDarkCheck = $useMasterDark;
 P.hotDarkLevel = $HotDarkLevel;
 P.coldDarkCheck = false;
 P.coldDarkLevel = 0.0000000;
-P.useAutoDetect = false;
-P.hotAutoCheck = false;
-P.hotAutoValue = 3.0;
-P.coldAutoCheck = false;
-P.coldAutoValue = 3.0;
+P.useAutoDetect = $($useAutoDetect.ToString().ToLower());
+P.hotAutoCheck = $($UseAutoHot.IsPresent.ToString().ToLower());
+P.hotAutoValue = $HotAutoSigma;
+P.coldAutoCheck = $($UseAutoCold.IsPresent.ToString().ToLower());
+P.coldAutoValue = $ColdAutoSigma;
 P.useDefectList = false;
 P.defects = [ // defectEnabled, defectIsRow, defectAddress, defectIsRange, defectBegin, defectEnd
 ];
@@ -983,6 +1000,8 @@ Function Invoke-LightFrameSorting
         [Parameter(Mandatory,ParameterSetName="ByDirectory")][int]$SetTemp,
         [Parameter()][System.IO.FileInfo]$MasterBias,
         [Parameter()][System.IO.FileInfo]$MasterDark,
+        [Parameter()][Switch]$CalibrateDark,
+        [Parameter()][Switch]$OptimizeDark,
         [Parameter()][System.IO.FileInfo]$MasterFlat,
         [Parameter(Mandatory)][System.IO.DirectoryInfo]$OutputPath,
 
@@ -1032,6 +1051,8 @@ Function Invoke-LightFrameSorting
                 -MasterBias $MasterBias `
                 -MasterDark $MasterDark `
                 -MasterFlat $MasterFlat `
+                -CalibrateDark:$CalibrateDark `
+                -OptimizeDark:$OptimizeDark `
                 -OutputPath $OutputDirPerObject `
                 -OutputPedestal $OutputPedestal `
                 -PixInsightSlot $PixInsightSlot `
