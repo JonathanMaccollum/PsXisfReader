@@ -12,6 +12,8 @@ Required tools:
 - At least one PixInsight "slot" reserved for use by the scripts that you author or would like to run
 - A powershell Editor such as Visual Studio Code (Recommended) with the PowerShell 2020.6.0 Preview plugin enabled (or newer)
 
+The module sourced in this repository is maintained on Powershell Gallery here: https://www.powershellgallery.com/packages/PsXisfReader/
+
 Getting Started:
 - Launch your preferred powershell editor and run the command ``install-module PsXisfReader`` to install the module.
 - Create a folder to create a project for maintaining your own scripts.
