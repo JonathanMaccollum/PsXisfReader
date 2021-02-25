@@ -7,17 +7,16 @@
 #
 
 @{
-ModuleVersion = '1.0.0'
+    RootModule="PixInsightPreProcessing.psm1"
+ModuleVersion = '1.0.11'
 GUID = '67d4833d-8c25-489b-893e-58f62eb0057b'
 Author = 'Jonathan W. MacCollum'
-CompanyName = 'Unknown'
 Copyright = '(c) Jonathan W. MacCollum. All rights reserved.'
 
-# Description of the functionality provided by this module
-# Description = ''
+Description = 'A set of Cmdlets for maintaining images acquired and saved in XISF format with the goal of automating pre-processing processing workflows.'
 
 # Minimum version of the PowerShell engine required by this module
-# PowerShellVersion = ''
+PowerShellVersion = '7.0'
 
 # Name of the PowerShell host required by this module
 # PowerShellHostName = ''
@@ -42,8 +41,7 @@ Copyright = '(c) Jonathan W. MacCollum. All rights reserved.'
 
 # Script files (.ps1) that are run in the caller's environment prior to importing this module.
 ScriptsToProcess = @(
-    "PsXisfReader.ps1"
-    "PixInsightPreProcessing.ps1"
+    "XisfFitsStats.ps1"
 )
 
 # Type files (.ps1xml) to be loaded when importing this module
@@ -53,13 +51,60 @@ ScriptsToProcess = @(
 # FormatsToProcess = @()
 
 # Modules to import as nested modules of the module specified in RootModule/ModuleToProcess
-# NestedModules = @()
+NestedModules = @(
+    "PsXisfReader.psm1"
+)
 
 # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-FunctionsToExport = @()
+FunctionsToExport = @(
+    'Get-XisfFitsStats'
+    'Get-XisfImageScale'
+    'Measure-ExposureTime'
+    'Get-MoonPercentIlluminated'
+    'Read-XisfSignature'
+    'Read-XisfHeader'
+    'Wait-PixInsightInstance'
+    'Get-PixInsightInstance'
+    'Start-PixInsight'
+    'Invoke-PixInsightScript'
+    'Format-PiPath'
+    'Invoke-PIIntegrationScript'
+    'Invoke-PICalibrationScript'
+    'Invoke-PiDarkIntegration'
+    'Invoke-PiFlatIntegration'
+    'Invoke-PiFlatCalibration'
+    'Invoke-PiLightCalibration'
+    'Invoke-PiCosmeticCorrection'
+    'Invoke-PiDebayer'
+    'Invoke-BiasFrameSorting'
+    'Invoke-DarkFrameSorting'
+    'Invoke-DarkFlatFrameSorting'
+    'Get-XisfFile'
+    'Skip-PathsContainingTokens'
+    'Get-XisfLightFrames'
+    'Get-XisfDarkFrames'
+    'Invoke-FlatFrameSorting'
+    'Get-CalibrationFile'
+    'Invoke-LightFrameSorting'
+    'Start-PiSubframeSelectorWeighting'
+    'Invoke-PiStarAlignment'
+    'Start-PiCometAlignment'
+    'Invoke-PiLightIntegration'
+    'New-XisfPreprocessingState'
+    'Get-XisfCalibrationState'
+    'Get-XisfCosmeticCorrectionState'
+    'Get-XisfSubframeSelectorState'
+    'Get-XisfDebayerState'
+    'Get-XisfSubframeSelectorState'
+    'Get-XisfAlignedState'
+    'Invoke-XisfPostCalibrationColorImageWorkflow'
+    'Invoke-XisfPostCalibrationMonochromeImageWorkflow'
+    'Get-MasterDarkLibrary'
+)
 
 # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
-CmdletsToExport = @()
+CmdletsToExport = @(
+)
 
 # Variables to export from this module
 VariablesToExport = '*'
