@@ -1,6 +1,6 @@
 A collection of scripts for maintaining, pre-processing, and stacking images obtained during and after an astrophotography session.
 
-This repository is home to a powershell module named PsXisfReader and PixInsightPreProcessing.
+This repository is home to a powershell module named PsXisfReader.
 
 PsXisfReader.psd1
  - A collection of cmdlets for reading data from xisf files per the [XISF 1.0 spec.](https://pixinsight.com/doc/docs/XISF-1.0-spec/XISF-1.0-spec.html)
@@ -13,10 +13,10 @@ Required tools:
 - A powershell Editor such as Visual Studio Code (Recommended) with the PowerShell 2020.6.0 Preview plugin enabled (or newer)
 
 Getting Started:
-- Launch your preferred powershell editor and run the command ``install-module PsXisfReader -Scope CurrentUser`` to install the module to your current user's modules, or if run as administrator you can run ``install-module PsXisfReader`` install the module on your machine directly.
-- Create a folder to create a project for maintaining your own scripts
-- Create a driver script for your the workflow you'd like to create with the following structure:
-- Import the PsXisfReader module at the top of the file using the ``import-module PsXisfReader`` command.
+- Launch your preferred powershell editor and run the command ``install-module PsXisfReader`` to install the module.
+- Create a folder to create a project for maintaining your own scripts.
+- Create a powershell script to author your processing workflow.
+- At the top of the script add a line to import the PsXisfReader module using the ``import-module PsXisfReader`` command.
 - Explore the available cmdlets using the following command: ``get-command module PsXisfReader``
 
 To reserve one or more Slots in PixInsight run the cmdlet ``Start-PixInsight -PixInsightSlot XXX``  one-time. This will launch an instance of PixInsight using the slot number you specified.  It's recommended to configure a dedicated Swap Storage Directory in Global Preferences for each slot you reserve. When you are done, close that instance of PixInsight.

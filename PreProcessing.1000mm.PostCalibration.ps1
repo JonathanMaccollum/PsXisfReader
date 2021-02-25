@@ -1,9 +1,9 @@
-import-module $PSScriptRoot/PsXisfReader.psd1 -Force
+Clear-Host
+import-module psxisfreader
 $ErrorActionPreference="STOP"
 $VerbosePreference="Continue"
-$target="E:\Astrophotography\135mm\Rosette Sh2-280 Sh2-284"
+$target="E:\Astrophotography\1000mm\IC417"
 
-Clear-Host
 $rawSubs = 
     Get-XisfLightFrames -Path $target -Recurse -UseCache -SkipOnError |
     where-object Instrument -eq "QHYCCD-Cameras-Capture (ASCOM)" |
