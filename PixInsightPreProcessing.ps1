@@ -2192,22 +2192,18 @@ Function Invoke-XisfPostCalibrationMonochromeImageWorkflow
                 $group|group-object{
                     ($_.Calibrated | Get-XisfFitsStats | Get-XisfCalibrationState -CalibratedPath $CalibrationPath).MasterDark
                 } | foreach-object {
-                    
                     $masterDarkFileName = $_.Name
                     $masterDark = get-childitem $DarkLibraryPath *.xisf -Recurse | where-object {$_.Name -eq $masterDarkFileName} | Select-Object -First 1
                     $images = $_.Group
                     Write-Host "Correcting $($images.Count) Images"
-                    if(-not $masterDark) {
-                        write-warning "Skipping $($images.Count) files... unable to locate master dark: $masterDarkFileName"
-                    }
-                    else{
-                        Invoke-PiCosmeticCorrection `
-                            -Images ($images.Calibrated) `
-                            -HotDarkLevel 0.4 `
-                            -MasterDark $masterDark `
-                            -OutputPath $CorrectedOutputPath `
-                            -PixInsightSlot $PixInsightSlot
-                    }
+                    Invoke-PiCosmeticCorrection `
+                        -Images ($images.Calibrated) `
+                        -HotDarkLevel 0.4 `
+                        -MasterDark $masterDark `
+                        -ColdAutoSigma 2.4 `
+                        -UseAutoCold $true `
+                        -OutputPath $CorrectedOutputPath `
+                        -PixInsightSlot $PixInsightSlot
                 }
                 $group |
                     Get-XisfCosmeticCorrectionState `
