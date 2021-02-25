@@ -22,7 +22,9 @@ Invoke-FlatFrameSorting `
 
 
 
-$DarkLibraryFiles = Get-MasterDarkLibrary -Path "E:\Astrophotography\DarkLibrary\ZWO ASI183MM Pro"
+$DarkLibraryFiles = Get-MasterDarkLibrary `
+    -Path "E:\Astrophotography\DarkLibrary\ZWO ASI183MM Pro" `
+    -Pattern "^(?<date>\d+).MasterDark.Gain.(?<gain>\d+).Offset.(?<offset>\d+).(?<temp>-?\d+)C.(?<numberOfExposures>\d+)x(?<exposure>\d+)s.xisf$"
 $DarkLibrary=($DarkLibraryFiles|group-object Instrument,Gain,Offset,Exposure,SetTemp|foreach-object {
     $instrument=$_.Group[0].Instrument
     $gain=$_.Group[0].Gain
