@@ -1,12 +1,10 @@
-A reader of fits headers for Xisf files
+A collection of scripts for maintaining, pre-processing, and stacking images obtained during and after an astrophotography session.
 
-Use cases:
- * Inventory of astrophotography images over time, target, filters
+This repository is home to a powershell module named PsXisfReader and PixInsightPreProcessing.
 
-To run:
+PsXisfReader
+ - A collection of cmdlets for reading data from xisf files per the [XISF 1.0 spec.](https://pixinsight.com/doc/docs/XISF-1.0-spec/XISF-1.0-spec.html)
 
-Clone the repository locally
-Pull up Examples.ps1
-Set the paths to your xisf files
-And optionally configure a cache file for minimizing re-reading of header data.
-It takes about 4 minutes the first run through my files/folders.
+PixInsightPreProcessing.ps1
+- A collection of cmdlets that can be used to launch PixInsight and invoke a number of workflow procedures for pre-processing (calibrating, debayering, weighting, aligning, and even integrating) images.
+
