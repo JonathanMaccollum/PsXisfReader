@@ -1,17 +1,17 @@
 import-module $PSScriptRoot/PsXisfReader.psd1 -Force
 $ErrorActionPreference="STOP"
 $VerbosePreference="Continue"
-#$target="E:\Astrophotography\135mm\M81M82 135mm Panel1"
-$target="E:\Astrophotography\135mm\M81M82 135mm Panel2"
-$alignmentReference=$null
-
+$target="E:\Astrophotography\135mm\Regulus 135mm"
+#$target="E:\Astrophotography\135mm\M81M82 135mm Panel2"
 #$alignmentReference = Get-Item "E:\Astrophotography\135mm\M81M82\M81M82.135mm.L3.D1.546x120s.integration.xisf"
-$alignmentReference = Get-Item "E:\Astrophotography\135mm\M81M82\M81M82.Panel2.135mm.L3.514x120s.integration.xisf"
+#$alignmentReference = Get-Item "E:\Astrophotography\135mm\M81M82\M81M82.Panel2.135mm.L3.514x120s.integration.xisf"
+
+$alignmentReference=$null
 Clear-Host
 $rawSubs = 
     Get-XisfLightFrames -Path $target -Recurse -UseCache -SkipOnError |
     Where-Object {-not $_.HasTokensInPath(@("reject","process","testing","clouds","draft","cloudy","_ez_LS_"))} |
-    Where-Object Filter -eq "D1" |
+    #Where-Object Filter -eq "D1" |
     Where-Object Instrument -eq "QHYCCD-Cameras-Capture (ASCOM)" |
     Where-Object {-not $_.IsIntegratedFile()}
 
@@ -20,11 +20,11 @@ $data=Invoke-XisfPostCalibrationMonochromeImageWorkflow `
     -CalibrationPath "E:\PixInsightLT\Calibrated" `
     -CorrectedOutputPath "S:\PixInsight\Corrected" `
     -WeightedOutputPath "S:\PixInsight\Weighted" `
-    -DarkLibraryPath "E:\Astrophotography\DarkLibrary\ZWO ASI183MM Pro" `
+    -DarkLibraryPath "E:\Astrophotography\DarkLibrary\QHYCCD-Cameras-Capture (ASCOM)" `
     -AlignedOutputPath "S:\PixInsight\Aligned" `
     -BackupCalibrationPaths @("T:\PixInsightLT\Calibrated","N:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated") `
     -PixInsightSlot 200 `
-    -SkipCosmeticCorrection:$true `
+    -SkipCosmeticCorrection:$false `
     -RerunWeighting:$false `
     -SkipWeighting:$false `
     -RerunAlignment:$false `
