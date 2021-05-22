@@ -39,6 +39,30 @@ Function Get-XisfImageScale
     )
     Write-Output (206.265*$Stats.XPIXSZ/$Stats.FocalLength)
 }
+Function Get-XisfHeader
+{
+    [CmdletBinding()]
+    [OutputType([xml])]
+    param
+    (
+        [Parameter(ValueFromPipeline=$true,Mandatory=$true)][System.IO.FileInfo]$Path
+    )
+    process{
+        $stream = [System.IO.File]::OpenRead($Path.FullName)
+        $reader=new-object System.IO.BinaryReader $stream
+        try
+        {
+            Read-XisfSignature $reader > $null
+            
+            Read-XisfHeader $reader
+        }
+        finally
+        {
+            $reader.Dispose()
+            $stream.Dispose()
+        }
+    }
+}
 Function Get-XisfFitsStats
 {
     [CmdletBinding()]
@@ -76,6 +100,7 @@ Function Get-XisfFitsStats
                 XPIXSZ=$result.XPIXSZ
                 YPIXSZ=$result.YPIXSZ
                 Geometry=$result.Geometry
+                Rotator=$result.Rotator
             })
         }
         elseif($ErrorCache -and $ErrorCache.ContainsKey($Path.FullName)){
@@ -84,12 +109,9 @@ Function Get-XisfFitsStats
         else
         {
             $result=$null
-            $stream = [System.IO.File]::OpenRead($Path.FullName)
-            $reader=new-object System.IO.BinaryReader $stream
             try
             {
-                Read-XisfSignature $reader > $null
-                $header=Read-XisfHeader $reader
+                $header = Get-XisfHeader -Path $Path
                 $geometry = $header.xisf.Image.geometry
                 $fits = $header.xisf.Image.FITSKeyword
                 $filter = $fits.Where({$_.Name -eq 'FILTER'}).value
@@ -100,8 +122,12 @@ Function Get-XisfFitsStats
                 $obsDate = $fits.Where{$_.Name -eq 'DATE-OBS'}.value | Select-Object -First 1
                 $obsDateMinus12hr= $null
                 if($obsDate){
-                    $obsDateMinus12hr=$obsDate|%{([DateTime]($_.Trim("'"))).AddHours(-12).Date}
+                    $obsDateMinus12hr=$obsDate|
+                        foreach-object{
+                            ([DateTime]($_.Trim("'"))).AddHours(-12).Date
+                        }
                 }
+
                 $results=@{
                     Exposure=$fits.Where{$_.Name -eq 'EXPOSURE'}.value
                     Filter=$filter
@@ -122,6 +148,7 @@ Function Get-XisfFitsStats
                     History=$fits.Where{$_.Name -eq 'HISTORY'}.comment
                     XPIXSZ=$fits.Where{$_.Name -eq 'XPIXSZ'}.value|%{if($_){$_.Trim("'")}}
                     YPIXSZ=$fits.Where{$_.Name -eq 'YPIXSZ'}.value|%{if($_){$_.Trim("'")}}
+                    Rotator=$fits.Where{$_.Name -eq 'ROTATOR'}.value|%{if($_){$_.Trim("'")}}
                     Path=$Path
                     Geometry=$geometry
                 }
@@ -146,15 +173,44 @@ Function Get-XisfFitsStats
                 }
                 throw
             }
-            finally
-            {
-                $reader.Dispose()
-                $stream.Dispose()
-            }
 
             if($result){
                 Write-Output $result
             }
+        }
+    }
+}
+Function Get-XisfProperties
+{
+    [CmdletBinding()]
+    param
+    (
+        [Parameter(ValueFromPipeline=$true,Mandatory=$true)][System.IO.FileInfo]$Path
+    )
+    process{     
+        $stream = [System.IO.File]::OpenRead($Path.FullName)
+        $reader=new-object System.IO.BinaryReader $stream
+        try
+        {
+            $header=Get-XisfHeader -Path $Path
+            $header.Xisf.Image.Property
+        }
+        catch [System.Xml.XmlException]{
+            Write-Warning ("An error occured reading the file "+($Path.FullName))
+            Write-Verbose $_.Exception.ToString()
+            if($ErrorCache){
+                $ErrorCache.Add($Path.FullName,$_.Exception)
+            }
+        }
+        catch {
+            Write-Warning "An unexpected error occured processing file $($Path.FullName)"
+            Write-Warning $_.Exception.ToString()
+            throw
+        }
+        finally
+        {
+            $reader.Dispose()
+            $stream.Dispose()
         }
     }
 }

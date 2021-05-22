@@ -22,3 +22,17 @@ Getting Started:
 - Explore the available cmdlets using the following command: ``get-command module PsXisfReader``
 
 To reserve one or more Slots in PixInsight run the cmdlet ``Start-PixInsight -PixInsightSlot XXX``  one-time. This will launch an instance of PixInsight using the slot number you specified.  It's recommended to configure a dedicated Swap Storage Directory in Global Preferences for each slot you reserve. When you are done, close that instance of PixInsight.
+
+Example usage:
+- To gather total integration time of images in a particular folder by filter, here's a short cmdlet that can be run.
+
+```powershell
+Get-XisfLightFrames -Path "E:\Astrophotography\1000mm\Eye of Smaug in Cygnus" -Recurse -UseCache -SkipOnError |
+    Where-Object {-not $_.HasTokensInPath(@("reject","process","testing","clouds","draft","cloudy","_ez_LS_","drizzle"))} |
+    group-object Filter|foreach-object {
+        $_.Group |
+            Measure-ExposureTime -TotalHours -TotalMinutes |
+            add-member -NotePropertyName Filter -NotePropertyValue ($_.Name) -PassThru
+    } | 
+    format-table Filter,Count,TotalMinutes,TotalHours
+```

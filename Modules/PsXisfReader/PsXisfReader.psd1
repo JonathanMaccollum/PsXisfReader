@@ -8,7 +8,7 @@
 
 @{
     RootModule="PixInsightPreProcessing.psm1"
-ModuleVersion = '1.0.13'
+ModuleVersion = '1.0.16'
 GUID = '67d4833d-8c25-489b-893e-58f62eb0057b'
 Author = 'Jonathan W. MacCollum'
 Copyright = '(c) Jonathan W. MacCollum. All rights reserved.'
@@ -63,6 +63,8 @@ FunctionsToExport = @(
     'Get-MoonPercentIlluminated'
     'Read-XisfSignature'
     'Read-XisfHeader'
+    'Get-XisfProperties'
+    'Get-XisfHeader'
     'Wait-PixInsightInstance'
     'Get-PixInsightInstance'
     'Start-PixInsight'

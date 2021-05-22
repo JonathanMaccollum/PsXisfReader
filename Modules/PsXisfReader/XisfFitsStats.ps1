@@ -20,6 +20,7 @@ class XisfFileStats {
     [decimal]$XPIXSZ
     [decimal]$YPIXSZ
     [string]$Geometry
+    [decimal]$Rotator
     [bool]HasTokensInPath([string[]]$tokens){
             $hasToken=$false
             foreach( $x in $tokens) {

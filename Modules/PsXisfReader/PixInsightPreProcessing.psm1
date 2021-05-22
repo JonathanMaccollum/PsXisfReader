@@ -382,6 +382,20 @@ Function Invoke-PiLightCalibration
         [Parameter(Mandatory=$false)][Switch]$KeepOpen,
         [Parameter()][int]$OutputPedestal=0
     )
+
+    if($MasterBias -and (-not (Test-Path $MasterBias))){
+        write-error "A master Bias was specified, but could not be located: $MasterBias"
+        return
+    }
+    if($MasterDark -and (-not (Test-Path $MasterDark))){
+        write-error "A master Dark was specified, but could not be located: $MasterDark"
+        return
+    }
+    if($MasterFlat -and (-not (Test-Path $MasterFlat))){
+        write-error "A master Flat was specified, but could not be located: $MasterFlat"
+        return
+    }
+
     if($MasterBias -and (Test-Path $MasterBias)){
         $masterBiasPath = Get-Item $MasterBias | Format-PiPath
         $masterBiasEnabled = "true"
@@ -2198,6 +2212,8 @@ Function Invoke-XisfPostCalibrationMonochromeImageWorkflow
                     Write-Host "Correcting $($images.Count) Images"
                     Invoke-PiCosmeticCorrection `
                         -Images ($images.Calibrated) `
+                        -UseAutoHot $true `
+                        -HotAutoSigma 40 `
                         -HotDarkLevel 0.4 `
                         -MasterDark $masterDark `
                         -ColdAutoSigma 2.4 `
