@@ -112,6 +112,52 @@ Function Format-PiPath
     
     }    
 }
+
+Function Invoke-PIIntegrationBatchScript
+{
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory=$true)][int]$PixInsightSlot, 
+        [Parameter(Mandatory=$true)][Array]$ScriptsWithOutputFile,
+        [Parameter(Mandatory=$false)][Switch]$KeepOpen
+    )
+
+    $ScriptToRun = New-TemporaryFile
+    $ScriptToRun = Rename-Item ($ScriptToRun.FullName) ($ScriptToRun.FullName+".scp") -PassThru
+    Write-Debug "creating temporary file $ScriptToRun"
+
+    $intermediateScripts = $ScriptsWithOutputFile | foreach-object {
+        $definition = $_.Script
+        $OutputFile = [System.IO.FileInfo]$_.OutputFile
+
+        $executionScript = New-TemporaryFile
+        $executionScript = Rename-Item ($executionScript.FullName) ($executionScript.FullName+".js") -PassThru
+        Write-Debug "creating temporary file $executionScript for $OutputFile"
+        $definition | Out-File $executionScript -Force
+
+        $scp = Format-PiPath -Path $executionScript
+        $output=$OutputFile|Format-PiPath
+        $Template="run -x $scp
+    save integration -p=`"$output`" --nodialog --nomessages --noverify
+    close integration
+    "
+        $Template|Out-File $ScriptToRun -Force -Append
+
+        $executionScript
+    }
+
+    try {
+        Write-Debug "Invoking Script ..."
+        Invoke-PixInsightScript `
+            -PixInsightSlot $PixInsightSlot `
+            -Path $ScriptToRun `
+            -KeepOpen:$KeepOpen
+    }
+    finally {
+        $intermediateScripts | Foreach-Object {Remove-Item -Path $_ -Force}
+        Remove-Item $ScriptToRun -Force
+    }
+}
 Function Invoke-PIIntegrationScript
 {
     [CmdletBinding()]
@@ -1360,7 +1406,11 @@ Function Invoke-PiLightIntegration
         [Parameter(Mandatory=$false)][string]$Normalization = "AdditiveWithScaling", #AdaptiveNormalization
         [Parameter(Mandatory=$false)][string]$RejectionNormalization = "Scale", #AdaptiveRejectionNormalization
         [Parameter(Mandatory=$false)][Switch]$GenerateDrizzleData,
-        [Parameter(Mandatory=$false)][string]$WeightKeyword = "SSWEIGHT"
+        [Parameter(Mandatory=$false)][string]$WeightKeyword = "SSWEIGHT",
+        [Parameter(Mandatory=$false)][string]$Combination = "Average",
+        [Parameter(Mandatory=$false)][bool]$GenerateRejectionMaps = $true,
+        [Parameter(Mandatory=$false)][bool]$EvaluateNoise = $true,
+        [Switch]$OutputDefinitionOnly
     )
     $ImageDefinition = [string]::Join("`r`n   , ",
     ($Images | ForEach-Object {
@@ -1372,10 +1422,13 @@ Function Invoke-PiLightIntegration
     if([string]::IsNullOrWhiteSpace($WeightKeyword)){
         $weightMode="NoiseEvaluation"
     }
+    if([string]::IsNullOrWhiteSpace($Combination)){
+        $Combination="Average"
+    }
     $IntegrationDefinition = 
     "var P = new ImageIntegration;
     P.inputHints = `"`";
-    P.combination = ImageIntegration.prototype.Average;
+    P.combination = ImageIntegration.prototype.$Combination;
     P.weightMode = ImageIntegration.prototype.$weightMode;
     P.weightKeyword = ""$WeightKeyword"";
     P.weightScale = ImageIntegration.prototype.WeightScale_IKSS;
@@ -1412,7 +1465,7 @@ Function Invoke-PiLightIntegration
     P.largeScaleClipHighProtectedLayers = 2;
     P.largeScaleClipHighGrowth = 2;
     P.generate64BitResult = false;
-    P.generateRejectionMaps = true;
+    P.generateRejectionMaps = $($GenerateRejectionMaps.ToString().ToLower());
     P.generateIntegratedImage = true;
     P.generateDrizzleData = $($GenerateDrizzleData.IsPresent.ToString().ToLower());
     P.closePreviousImages = false;
@@ -1426,7 +1479,7 @@ Function Invoke-PiLightIntegration
     P.roiX1 = 3036;
     P.roiY1 = 1293;
     P.useCache = true;
-    P.evaluateNoise = true;
+    P.evaluateNoise = $($EvaluateNoise.ToString().ToLower());
     P.mrsMinDataFraction = 0.010;
     P.subtractPedestals = false;
     P.truncateOnOutOfRange = false;
@@ -1436,18 +1489,24 @@ Function Invoke-PiLightIntegration
     P.images= [`r`n     $ImageDefinition`r`n   ];
     P.launch();
     P.executeGlobal();"
-    $executionScript = New-TemporaryFile
-    $executionScript = Rename-Item ($executionScript.FullName) ($executionScript.FullName+".js") -PassThru
-    try {
-        $IntegrationDefinition|Out-File -FilePath $executionScript -Force 
-        Invoke-PIIntegrationScript `
-            -path $executionScript `
-            -PixInsightSlot $PixInsightSlot `
-            -OutputFile $OutputFile `
-            -KeepOpen:$KeepOpen
+
+    if($OutputDefinitionOnly){
+        Write-Output -NoEnumerate $IntegrationDefinition
     }
-    finally {
-        Remove-Item $executionScript -Force
+    else{
+        $executionScript = New-TemporaryFile
+        $executionScript = Rename-Item ($executionScript.FullName) ($executionScript.FullName+".js") -PassThru
+        try {
+            $IntegrationDefinition|Out-File -FilePath $executionScript -Force 
+            Invoke-PIIntegrationScript `
+                -path $executionScript `
+                -PixInsightSlot $PixInsightSlot `
+                -OutputFile $OutputFile `
+                -KeepOpen:$KeepOpen
+        }
+        finally {
+            Remove-Item $executionScript -Force
+        }
     }
 } 
 
