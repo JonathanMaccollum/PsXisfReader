@@ -728,7 +728,6 @@ Function Invoke-DarkFrameSorting
         $setTemp=($images[0].SetTemp)
         $gain=($images[0].Gain)
         $offset=($images[0].Offset)
-        $geometry=($images[0].Geometry)
         $date = ([DateTime]$images[0].LocalDate).Date.ToString('yyyyMMdd')
         $targetDirectory = "$ArchiveDirectory\DarkLibrary\$instrument"
         [System.IO.Directory]::CreateDirectory($targetDirectory)>>$null
@@ -1068,7 +1067,8 @@ Function Invoke-LightFrameSorting
         [Parameter(Mandatory)][int]$PixInsightSlot,
         [System.IO.DirectoryInfo[]]$AdditionalSearchPaths,
         [Parameter(Mandatory=$false)][int]$OutputPedestal = 0,
-        [Parameter(Mandatory=$false)][Switch]$KeepOpen
+        [Parameter(Mandatory=$false)][Switch]$KeepOpen,
+        [Parameter(Mandatory=$false)][ScriptBlock]$AfterImageCalibrated
     )
     if($null -eq $XisfStats)
     {
@@ -1129,7 +1129,12 @@ Function Invoke-LightFrameSorting
         $archive = join-path $archive "$($exposure).00s"
         [System.IO.Directory]::CreateDirectory($archive) >> $null
 
-        $_.Group | Foreach-Object {Move-Item -Path $_.Path -Destination $archive}
+        $_.Group | Foreach-Object {
+            if($AfterImageCalibrated){
+                $AfterImageCalibrated.Invoke($_)
+            }
+            Move-Item -Path $_.Path -Destination $archive
+        }
     }
 }
 Function Start-PiSubframeSelectorWeighting
@@ -1406,6 +1411,7 @@ Function Invoke-PiLightIntegration
         [Parameter(Mandatory=$false)][string]$Normalization = "AdditiveWithScaling", #AdaptiveNormalization
         [Parameter(Mandatory=$false)][string]$RejectionNormalization = "Scale", #AdaptiveRejectionNormalization
         [Parameter(Mandatory=$false)][Switch]$GenerateDrizzleData,
+        [Parameter(Mandatory=$false)][string]$WeightMode = "KeywordWeight",
         [Parameter(Mandatory=$false)][string]$WeightKeyword = "SSWEIGHT",
         [Parameter(Mandatory=$false)][string]$Combination = "Average",
         [Parameter(Mandatory=$false)][bool]$GenerateRejectionMaps = $true,
@@ -1418,9 +1424,8 @@ Function Invoke-PiLightIntegration
         $y=if($GenerateDrizzleData.IsPresent){$x.Replace(".xisf",".xdrz")}else{""}
         "[true, ""$x"", ""$y"", """"]"
     }))
-    $weightMode = "KeywordWeight"
     if([string]::IsNullOrWhiteSpace($WeightKeyword)){
-        $weightMode="NoiseEvaluation"
+        $WeightMode="NoiseEvaluation"
     }
     if([string]::IsNullOrWhiteSpace($Combination)){
         $Combination="Average"
@@ -1429,7 +1434,7 @@ Function Invoke-PiLightIntegration
     "var P = new ImageIntegration;
     P.inputHints = `"`";
     P.combination = ImageIntegration.prototype.$Combination;
-    P.weightMode = ImageIntegration.prototype.$weightMode;
+    P.weightMode = ImageIntegration.prototype.$WeightMode;
     P.weightKeyword = ""$WeightKeyword"";
     P.weightScale = ImageIntegration.prototype.WeightScale_IKSS;
     P.ignoreNoiseKeywords = false;
