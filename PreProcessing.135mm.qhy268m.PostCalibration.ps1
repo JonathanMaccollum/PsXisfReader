@@ -1,7 +1,7 @@
-import-module $PSScriptRoot/PsXisfReader.psd1 -Force
+#import-module $PSScriptRoot/PsXisfReader.psd1 -Force
 $ErrorActionPreference="STOP"
 $VerbosePreference="Continue"
-$target="E:\Astrophotography\135mm\Regulus 135mm"
+$target="E:\Astrophotography\135mm\Sh2-27"
 #$target="E:\Astrophotography\135mm\M81M82 135mm Panel2"
 #$alignmentReference = Get-Item "E:\Astrophotography\135mm\M81M82\M81M82.135mm.L3.D1.546x120s.integration.xisf"
 #$alignmentReference = Get-Item "E:\Astrophotography\135mm\M81M82\M81M82.Panel2.135mm.L3.514x120s.integration.xisf"
@@ -17,7 +17,7 @@ $rawSubs =
 
 $data=Invoke-XisfPostCalibrationMonochromeImageWorkflow `
     -RawSubs $rawSubs `
-    -CalibrationPath "E:\PixInsightLT\Calibrated" `
+    -CalibrationPath "F:\PixInsightLT\Calibrated" `
     -CorrectedOutputPath "S:\PixInsight\Corrected" `
     -WeightedOutputPath "S:\PixInsight\Weighted" `
     -DarkLibraryPath "E:\Astrophotography\DarkLibrary\QHYCCD-Cameras-Capture (ASCOM)" `

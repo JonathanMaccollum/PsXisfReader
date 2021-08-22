@@ -4,7 +4,7 @@ $ErrorActionPreference="STOP"
 $WarningPreference="Continue"
 $DropoffLocation = "D:\Backups\Camera\Dropoff\NINA"
 $ArchiveDirectory="E:\Astrophotography"
-$CalibratedOutput = "E:\PixInsightLT\Calibrated"
+$CalibratedOutput = "F:\PixInsightLT\Calibrated"
 
 Invoke-DarkFrameSorting `
     -DropoffLocation $DropoffLocation `
@@ -18,7 +18,7 @@ Invoke-DarkFlatFrameSorting `
 Invoke-FlatFrameSorting `
     -DropoffLocation $DropoffLocation `
     -ArchiveDirectory $ArchiveDirectory `
-    -CalibratedFlatsOutput "E:\PixInsightLT\CalibratedFlats" `
+    -CalibratedFlatsOutput "F:\PixInsightLT\CalibratedFlats" `
     -PixInsightSlot 200
 $DarkLibraryFiles = Get-MasterDarkLibrary `
         -Path "E:\Astrophotography\DarkLibrary\ZWO ASI183MM Pro" `

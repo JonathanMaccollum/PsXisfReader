@@ -1,27 +1,27 @@
-import-module $PSScriptRoot/PsXisfReader.psd1 -Force
-$ErrorActionPreference="STOP"
-
-$target="E:\Astrophotography\135mm\Orion Panel 8"
-$alignmentReference=$null
 Clear-Host
+if (-not (get-module psxisfreader)){import-module psxisfreader}
+$ErrorActionPreference="STOP"
+$VerbosePreference="Continue"
+$target="E:\Astrophotography\135mm\NGC7000"
+$alignmentReference=$null
 
 $rawSubs =
     Get-XisfLightFrames -Path $target -Recurse |
     Where-Object {-not $_.HasTokensInPath(@("reject","process","testing","clouds","draft","cloudy","_ez_LS_"))} |
     Where-Object {-not $_.IsIntegratedFile()} |
-    Where-Object Filter -eq "L3"
+    Where-Object Filter -eq "D1"
 $alignmentReference=$null
     
 $data = Invoke-XisfPostCalibrationColorImageWorkflow `
     -RawSubs $rawSubs `
-    -CalibrationPath "E:\PixInsightLT\Calibrated" `
+    -CalibrationPath "F:\PixInsightLT\Calibrated" `
     -CorrectedOutputPath "S:\PixInsight\Corrected" `
     -WeightedOutputPath "S:\PixInsight\Weighted" `
     -DebayeredOutputPath "S:\PixInsight\Debayered" `
     -DarkLibraryPath "E:\Astrophotography\DarkLibrary\ZWO ASI071MC Pro" `
     -AlignedOutputPath "S:\PixInsight\Aligned" `
     -BackupCalibrationPaths @("T:\PixInsightLT\Calibrated","N:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated") `
-    -PixInsightSlot 200 `
+    -PixInsightSlot 201 `
     -RerunWeighting:$false `
     -SkipWeighting:$false `
     -RerunCosmeticCorrection:$false `
@@ -55,7 +55,7 @@ if($toReject -and (Read-Host -Prompt "Move $($toReject.Count) Rejected files?") 
     }
 }
 
-if((Read-Host -Prompt "Cleanup intermediate files (debayered, weighted, aligned, drizzle)?") -eq "Y"){
+if((Read-Host -Prompt "Cleanup intermediate files (corrected, debayered, weighted, aligned, drizzle)?") -eq "Y"){
     $data|foreach-object{
         $_.RemoveAlignedAndDrizzleFiles()
         $_.RemoveWeightedFiles()

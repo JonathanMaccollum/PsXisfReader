@@ -3,7 +3,7 @@ $ErrorActionPreference="STOP"
 
 $DropoffLocation = "D:\Backups\Camera\Dropoff\NINA"
 $ArchiveDirectory="E:\Astrophotography"
-$CalibratedOutput = "E:\PixInsightLT\Calibrated"
+$CalibratedOutput = "F:\PixInsightLT\Calibrated"
 
 Get-ChildItem $DropoffLocation "*.xisf" |
     sort-object LastWriteTime -Descending |
@@ -23,7 +23,7 @@ Invoke-DarkFlatFrameSorting `
 Invoke-FlatFrameSorting `
     -DropoffLocation $DropoffLocation `
     -ArchiveDirectory $ArchiveDirectory `
-    -CalibratedFlatsOutput "E:\PixInsightLT\CalibratedFlats" `
+    -CalibratedFlatsOutput "F:\PixInsightLT\CalibratedFlats" `
     -PixInsightSlot 200
 
 

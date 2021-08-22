@@ -1,7 +1,7 @@
-import-module $PSScriptRoot/PsXisfReader.psd1 -Force
+if (-not (get-module psxisfreader)){import-module psxisfreader}
 $ErrorActionPreference="STOP"
 
-$target="E:\Astrophotography\50mm\M81 M82 50mm"
+$target="E:\Astrophotography\50mm\Little Dipper OSC"
 #$alignmentReference="E:\Astrophotography\50mm\Orion 50mm\Orion 50mm.Ha3nm.30x6min.ESD.Drizzle2x.xisf"
 $alignmentReference=$null
 Clear-Host
@@ -10,20 +10,25 @@ $rawSubs =
     Get-XisfLightFrames -Path $target -Recurse |
     Where-Object {-not $_.HasTokensInPath(@("reject","process","testing","clouds","draft","cloudy","_ez_LS_"))} |
     Where-Object {-not $_.IsIntegratedFile()} |
-    Where-Object Filter -eq "D1"
+    Where-Object Filter -ne "V4"
+
+    #    -CalibrationPath "F:\PixInsightLT\Calibrated\M81 M82 50mm\SuperFlatted" `
 
 $data = Invoke-XisfPostCalibrationColorImageWorkflow `
     -RawSubs $rawSubs `
-    -CalibrationPath "E:\PixInsightLT\Calibrated" `
     -CorrectedOutputPath "S:\PixInsight\Corrected" `
+    -CalibrationPath "F:\PixInsightLT\Calibrated" `
     -WeightedOutputPath "S:\PixInsight\Weighted" `
     -DebayeredOutputPath "S:\PixInsight\Debayered" `
     -DarkLibraryPath "E:\Astrophotography\DarkLibrary\ZWO ASI071MC Pro" `
     -AlignedOutputPath "S:\PixInsight\Aligned" `
     -BackupCalibrationPaths @("T:\PixInsightLT\Calibrated","N:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated") `
-    -PixInsightSlot 200 `
+    -PixInsightSlot 201 `
+    -RerunCosmeticCorrection:$true `
+    -SkipCosmeticCorrection:$false `
     -RerunWeighting:$false `
-    -RerunAlignment `
+    -SkipWeighting:$false `
+    -RerunAlignment:$false `
     -IntegratedImageOutputDirectory $target `
     -AlignmentReference $alignmentReference `
     -GenerateDrizzleData `
@@ -55,7 +60,7 @@ if((Read-Host -Prompt "Cleanup intermediate files (debayered, weighted, aligned,
         $_.RemoveAlignedAndDrizzleFiles()
         $_.RemoveWeightedFiles()
         $_.RemoveDebayeredFiles()
-        $_.RemoveCorrectedFiles()
+        #$_.RemoveCorrectedFiles()
     }
 }
 

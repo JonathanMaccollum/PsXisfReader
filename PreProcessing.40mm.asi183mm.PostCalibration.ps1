@@ -1,7 +1,7 @@
 if (-not (get-module psxisfreader)){import-module psxisfreader}
 $ErrorActionPreference="STOP"
 $VerbosePreference="Continue"
-$target="E:\Astrophotography\50mm\Patchwork Cygnus 50mm Center"
+$target="E:\Astrophotography\40mm\Greater Cepheus"
 $alignmentReference=$null
 #$alignmentReference="PatchworkCygnus_0_3.BHS_Ha.11x240s.BHS_Ha.6x300s.BHS_Ha.5x600s.xisf"
 #$alignmentReference="PatchworkCygnus_0_4.BHS_Ha.36x300s.Adaptive.xisf"
@@ -17,13 +17,13 @@ $alignmentReference=$null
 #$alignmentReference="Cassiopeia.BHS_Ha.10x600s.Adaptive.ESD.xisf"
 #$alignmentReference=Join-Path $target "Taurus to Pleiades 2 50mm.BHS_Ha.33x360s.ESD.xisf"
 #$alignmentReference=Join-Path $target "PatchworkCygnus_2_2.BHS_Ha.20x360s.BHS_Ha.19x600s.Adaptive.ESD.xisf"
-
+#$alignmentReference=Join-Path $target "Patchwork Cygnus Center.Ha.21x360s.LF.xisf"
 Clear-Host
 
 $rawSubs =
     Get-XisfLightFrames -Path $target -Recurse -UseCache -SkipOnError |
     Where-Object {-not $_.HasTokensInPath(@("reject","process","testing","clouds","draft","cloudy","_ez_LS_"))} |
-    #Where-Object Filter -ne "BHS_Ha" |
+    #Where-Object Filter -ne "Oiii" |
     #Where-Object Filter -eq "BHS_Sii" |
     Where-Object {-not $_.IsIntegratedFile()} 
 

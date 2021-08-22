@@ -1,7 +1,8 @@
+#import-module $PSScriptRoot/PsXisfReader.psd1 -Force
 if (-not (get-module psxisfreader)){import-module psxisfreader}
 $ErrorActionPreference="STOP"
 
-$DropoffLocation = "D:\Backups\Camera\Dropoff\NINA"
+$DropoffLocation = "D:\Backups\Camera\Dropoff\NINACS"
 $ArchiveDirectory="E:\Astrophotography"
 $CalibratedOutput = "F:\PixInsightLT\Calibrated"
 
@@ -9,7 +10,7 @@ Invoke-DarkFrameSorting `
     -DropoffLocation $DropoffLocation `
     -ArchiveDirectory $ArchiveDirectory `
     -PixInsightSlot 201 `
-    -Verbose
+    -Verbose -KeepOpen
 Invoke-DarkFlatFrameSorting `
     -DropoffLocation $DropoffLocation `
     -ArchiveDirectory $ArchiveDirectory `
@@ -20,7 +21,7 @@ Invoke-FlatFrameSorting `
     -CalibratedFlatsOutput "F:\PixInsightLT\CalibratedFlats" `
     -PixInsightSlot 201
 
-$DarkLibraryFiles = Get-MasterDarkLibrary `
+$DarkLibraryFiles=Get-MasterDarkLibrary `
     -Path "E:\Astrophotography\DarkLibrary\ZWO ASI071MC Pro" `
     -Pattern "^(?<date>\d+).MasterDark.Gain.(?<gain>\d+).Offset.(?<offset>\d+).(?<temp>-?\d+)C.(?<numberOfExposures>\d+)x(?<exposure>\d+)s.xisf$"
 $DarkLibrary=($DarkLibraryFiles|group-object Instrument,Gain,Offset,Exposure,SetTemp|foreach-object {
@@ -45,7 +46,7 @@ Get-ChildItem $DropoffLocation *.xisf |
     Get-XisfFitsStats | 
     where-object Instrument -eq "ZWO ASI071MC Pro" |
     where-object ImageType -eq "LIGHT" |
-    where-object FocalLength -eq "135" |
+    where-object FocalLength -eq "40" |
     group-object Instrument,SetTemp,Gain,Offset,Exposure |
     foreach-object {
         $lights = $_.Group
@@ -64,8 +65,14 @@ Get-ChildItem $DropoffLocation *.xisf |
             ($dark.Offset-eq $offset) -and
             ($dark.Exposure-eq $exposure) -and
             #($dark.SetTemp -eq $setTemp)
-            ([Math]::abs($dark.SetTemp - $ccdTemp) -lt 2)
+            ([Math]::abs($dark.SetTemp - $ccdTemp) -lt 3)
         } | select-object -first 1
+
+        
+        # if(-not $masterDark){
+        #     $masterDark = $DarkLibrary | where-object {$_.Path.FullName -eq "E:\Astrophotography\DarkLibrary\ZWO ASI071MC Pro\20200517.MasterDark.Gain.90.Offset.65.-10C.110x120s.xisf"}
+        # }
+
 
         if(-not $masterDark){
             Write-Warning "Unable to process $($lights.Count) images: No master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp"
@@ -76,7 +83,7 @@ Get-ChildItem $DropoffLocation *.xisf |
                 foreach-object {
                     $filter = $_.Group[0].Filter
                     $focalLength=$_.Group[0].FocalLength
-                    $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20210730.MasterFlatCal.$filter.xisf"
+                    $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20210530.MasterFlatCal.F4.$filter.xisf"
 
                     if(-not (test-path $masterFlat)) {
                         Write-Warning "Skipping $($_.Group.Count) frames at ($focalLength)mm with filter $filter. Reason: No master flat was found."
@@ -84,8 +91,6 @@ Get-ChildItem $DropoffLocation *.xisf |
                     else{
 
                         Write-Host "Sorting $($_.Group.Count) frames at ($focalLength)mm with filter $filter"
-                        Write-Host " Dark: $($masterDark.Path)"
-                        Write-Host " Flat: $($masterFlat)"
 
                         Invoke-LightFrameSorting `
                             -XisfStats ($_.Group) -ArchiveDirectory $ArchiveDirectory `

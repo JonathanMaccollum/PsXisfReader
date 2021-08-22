@@ -1,27 +1,32 @@
 if (-not (get-module psxisfreader)){import-module psxisfreader}
 $ErrorActionPreference="STOP"
-
+$VerbosePreference="Continue"
 $DropoffLocation = "D:\Backups\Camera\Dropoff\NINA"
 $ArchiveDirectory="E:\Astrophotography"
 $CalibratedOutput = "F:\PixInsightLT\Calibrated"
 
+Invoke-BiasFrameSorting `
+    -DropoffLocation $DropoffLocation `
+    -ArchiveDirectory $ArchiveDirectory `
+    -PixInsightSlot 200 `
+    -Verbose 
 Invoke-DarkFrameSorting `
     -DropoffLocation $DropoffLocation `
     -ArchiveDirectory $ArchiveDirectory `
-    -PixInsightSlot 201 `
+    -PixInsightSlot 200 `
     -Verbose
 Invoke-DarkFlatFrameSorting `
     -DropoffLocation $DropoffLocation `
     -ArchiveDirectory $ArchiveDirectory `
-    -PixInsightSlot 201
+    -PixInsightSlot 200
 Invoke-FlatFrameSorting `
     -DropoffLocation $DropoffLocation `
     -ArchiveDirectory $ArchiveDirectory `
     -CalibratedFlatsOutput "F:\PixInsightLT\CalibratedFlats" `
-    -PixInsightSlot 201
+    -PixInsightSlot 200
 
 $DarkLibraryFiles = Get-MasterDarkLibrary `
-    -Path "E:\Astrophotography\DarkLibrary\ZWO ASI071MC Pro" `
+    -Path "E:\Astrophotography\DarkLibrary\ZWO ASI183MM Pro" `
     -Pattern "^(?<date>\d+).MasterDark.Gain.(?<gain>\d+).Offset.(?<offset>\d+).(?<temp>-?\d+)C.(?<numberOfExposures>\d+)x(?<exposure>\d+)s.xisf$"
 $DarkLibrary=($DarkLibraryFiles|group-object Instrument,Gain,Offset,Exposure,SetTemp|foreach-object {
     $instrument=$_.Group[0].Instrument
@@ -40,12 +45,12 @@ $DarkLibrary=($DarkLibraryFiles|group-object Instrument,Gain,Offset,Exposure,Set
         Path=$dark.Path
     }
 })
-
+#$DarkLibrary|FT
 Get-ChildItem $DropoffLocation *.xisf |
     Get-XisfFitsStats | 
-    where-object Instrument -eq "ZWO ASI071MC Pro" |
+    where-object Instrument -eq "ZWO ASI183MM Pro" |
     where-object ImageType -eq "LIGHT" |
-    where-object FocalLength -eq "135" |
+    where-object FocalLength -eq 40 |
     group-object Instrument,SetTemp,Gain,Offset,Exposure |
     foreach-object {
         $lights = $_.Group
@@ -55,7 +60,7 @@ Get-ChildItem $DropoffLocation *.xisf |
         $gain=[decimal]$x.Gain
         $offset=[decimal]$x.Offset
         $exposure=[decimal]$x.Exposure
-        $ccdTemp = [decimal]$x.CCDTemp
+        $ccdTemp=[decimal]$x.CCDTemp
         $setTemp=[decimal]$x.SetTemp
         $masterDark = $DarkLibrary | where-object {
             $dark = $_
@@ -63,9 +68,10 @@ Get-ChildItem $DropoffLocation *.xisf |
             ($dark.Gain-eq $gain) -and
             ($dark.Offset-eq $offset) -and
             ($dark.Exposure-eq $exposure) -and
-            #($dark.SetTemp -eq $setTemp)
-            ([Math]::abs($dark.SetTemp - $ccdTemp) -lt 2)
-        } | select-object -first 1
+            ($dark.SetTemp-eq $setTemp) -and
+            ([Math]::abs($dark.SetTemp - $ccdTemp) -lt 3)
+        } |
+        select-object -first 1
 
         if(-not $masterDark){
             Write-Warning "Unable to process $($lights.Count) images: No master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp"
@@ -76,7 +82,7 @@ Get-ChildItem $DropoffLocation *.xisf |
                 foreach-object {
                     $filter = $_.Group[0].Filter
                     $focalLength=$_.Group[0].FocalLength
-                    $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20210730.MasterFlatCal.$filter.xisf"
+                    $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20210714.MasterFlatCal.$filter.xisf"
 
                     if(-not (test-path $masterFlat)) {
                         Write-Warning "Skipping $($_.Group.Count) frames at ($focalLength)mm with filter $filter. Reason: No master flat was found."
@@ -92,11 +98,10 @@ Get-ChildItem $DropoffLocation *.xisf |
                             -MasterDark ($masterDark.Path) `
                             -MasterFlat $masterFlat `
                             -OutputPath $CalibratedOutput `
-                            -PixInsightSlot 201 `
-                            -OutputPedestal 50 `
+                            -PixInsightSlot 200 `
+                            -OutputPedestal 200 `
                             -Verbose
                     }
                 }
         }
     }
-

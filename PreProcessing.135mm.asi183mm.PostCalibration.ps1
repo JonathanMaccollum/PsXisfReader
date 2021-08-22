@@ -1,4 +1,4 @@
-import-module $PSScriptRoot/PsXisfReader.psd1 -Force
+#import-module $PSScriptRoot/PsXisfReader.psd1 -Force
 $ErrorActionPreference="STOP"
 $VerbosePreference="Continue"
 $target="E:\Astrophotography\135mm\Flaming Star Panel 1"
@@ -27,7 +27,7 @@ Clear-Host
 $rawSubs = 
     Get-XisfLightFrames -Path $target -Recurse -UseCache -SkipOnError |
     Where-Object {-not $_.HasTokensInPath(@("reject","process","testing","clouds","draft","cloudy","_ez_LS_"))} |
-    #Where-Object Filter -ne "BHS_Oiii" |
+    Where-Object Filter -eq "BHS_Sii" |
     #Where-Object Filter -ne "L3" |
     #Where-Object Filter -ne "IR742" |
     #Where-Object Filter -eq "BHS_Ha" |
@@ -36,7 +36,7 @@ $rawSubs =
     
 $data=Invoke-XisfPostCalibrationMonochromeImageWorkflow `
     -RawSubs $rawSubs `
-    -CalibrationPath "E:\PixInsightLT\Calibrated" `
+    -CalibrationPath "F:\PixInsightLT\Calibrated" `
     -CorrectedOutputPath "S:\PixInsight\Corrected" `
     -WeightedOutputPath "S:\PixInsight\Weighted" `
     -DarkLibraryPath "E:\Astrophotography\DarkLibrary\ZWO ASI183MM Pro" `
@@ -51,6 +51,7 @@ $data=Invoke-XisfPostCalibrationMonochromeImageWorkflow `
     -IntegratedImageOutputDirectory $target `
     -AlignmentReference $alignmentReference `
     -GenerateDrizzleData `
+    -Rejection "Rejection_ESD" `
     -ApprovalExpression "Median<120 && FWHM<4.5" `
     -WeightingExpression "(15*(1-(FWHM-FWHMMin)/(FWHMMax-FWHMMin))
     +  5*(1-(Eccentricity-EccentricityMin)/(EccentricityMax-EccentricityMin))

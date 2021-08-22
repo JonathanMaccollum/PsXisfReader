@@ -1,10 +1,9 @@
-import-module $PSScriptRoot/PsXisfReader.psd1 -Force
-
+if (-not (get-module psxisfreader)){import-module psxisfreader}
 $ErrorActionPreference="STOP"
-
+$VerbosePreference="Continue"
 $DropoffLocation = "D:\Backups\Camera\Dropoff\NINACS"
 $ArchiveDirectory="E:\Astrophotography"
-$CalibratedOutput = "E:\PixInsightLT\Calibrated"
+$CalibratedOutput = "F:\PixInsightLT\Calibrated"
 
 Invoke-DarkFrameSorting `
     -DropoffLocation $DropoffLocation `
@@ -18,7 +17,7 @@ Invoke-DarkFlatFrameSorting `
 Invoke-FlatFrameSorting `
     -DropoffLocation $DropoffLocation `
     -ArchiveDirectory $ArchiveDirectory `
-    -CalibratedFlatsOutput "E:\PixInsightLT\CalibratedFlats" `
+    -CalibratedFlatsOutput "F:\PixInsightLT\CalibratedFlats" `
     -PixInsightSlot 200
 
 $DarkLibraryFiles = Get-MasterDarkLibrary `
@@ -76,12 +75,12 @@ Get-ChildItem $DropoffLocation *.xisf |
                 foreach-object {
                     $filter = $_.Group[0].Filter
                     $focalLength=$_.Group[0].FocalLength
-                    $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20200926.MasterFlatCal.$filter.xisf"
+                    $masterFlat = $null #"E:\Astrophotography\$($focalLength)mm\Flats\20200926.MasterFlatCal.$filter.xisf"
 
-                    if(-not (test-path $masterFlat)) {
-                        Write-Warning "Skipping $($_.Group.Count) frames at ($focalLength)mm with filter $filter. Reason: No master flat was found."
-                    }
-                    else{
+                    #if(-not (test-path $masterFlat)) {
+                    #    Write-Warning "Skipping $($_.Group.Count) frames at ($focalLength)mm with filter $filter. Reason: No master flat was found."
+                    #}
+                    #else{
 
                         Write-Host "Sorting $($_.Group.Count) frames at ($focalLength)mm with filter $filter"
 
@@ -92,8 +91,8 @@ Get-ChildItem $DropoffLocation *.xisf |
                             -OutputPath $CalibratedOutput `
                             -PixInsightSlot 200 `
                             -OutputPedestal 200 `
-                            -Verbose #-KeepOpen
-                    }
+                            -Verbose -KeepOpen
+                    #}
                 }
         }
     }
