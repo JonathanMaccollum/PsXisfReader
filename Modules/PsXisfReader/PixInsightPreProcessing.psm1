@@ -165,12 +165,28 @@ Function Invoke-PIIntegrationScript
         [Parameter(Mandatory=$true)][int]$PixInsightSlot, 
         [Parameter(Mandatory=$true)][System.IO.FileInfo]$Path, 
         [Parameter(Mandatory=$true)][System.IO.FileInfo]$OutputFile,
-        [Parameter(Mandatory=$false)][Switch]$KeepOpen
+        [Parameter(Mandatory=$false)][Switch]$KeepOpen,
+        [Parameter(Mandatory=$false)][Switch]$GenerateThumbnail
+
     )
     $scp = $Path|Format-PiPath
     $output=$OutputFile|Format-PiPath
     $Template="run -x $scp
 save integration -p=`"$output`" --nodialog --nomessages --noverify"
+    if($GenerateThumbnail.IsPresent){
+        $ThumbnailDir = 
+            Join-Path `
+                -Path $OutputFile.Directory.FullName `
+                -ChildPath "Thumbnails"
+        [System.IO.Directory]::CreateDirectory($ThumbnailDir) >> $null
+        $thumbnail= Format-PiPath -Path (Join-Path `
+                -Path $ThumbnailDir `
+                -ChildPath ([System.IO.Path]::GetFileNameWithoutExtension($OutputFile)+".jpeg"))
+            
+        $Template += "
+PixelMath -n+ -id=Thumbnail -s=B,C,c -x=`"B = 0.25;C = -1.8;c = min( max( 0, med( integration ) + C*1.4826*mdev( integration  ) ), 1 );mtf( mtf( B, med( integration  ) - c ), max( 0, (integration  - c)/~c ) ) `"
+save Thumbnail -p=`"$thumbnail`" --nodialog --nomessages --noverify"
+    }
     $ScriptToRun = New-TemporaryFile
     $ScriptToRun = Rename-Item ($ScriptToRun.FullName) ($ScriptToRun.FullName+".scp") -PassThru
     $Template|Out-File $ScriptToRun -Force
@@ -1416,7 +1432,8 @@ Function Invoke-PiLightIntegration
         [Parameter(Mandatory=$false)][string]$Combination = "Average",
         [Parameter(Mandatory=$false)][bool]$GenerateRejectionMaps = $true,
         [Parameter(Mandatory=$false)][bool]$EvaluateNoise = $true,
-        [Switch]$OutputDefinitionOnly
+        [Switch]$OutputDefinitionOnly,
+        [Switch]$GenerateThumbnail
     )
     $ImageDefinition = [string]::Join("`r`n   , ",
     ($Images | ForEach-Object {
@@ -1507,7 +1524,8 @@ Function Invoke-PiLightIntegration
                 -path $executionScript `
                 -PixInsightSlot $PixInsightSlot `
                 -OutputFile $OutputFile `
-                -KeepOpen:$KeepOpen
+                -KeepOpen:$KeepOpen `
+                -GenerateThumbnail:$GenerateThumbnail
         }
         finally {
             Remove-Item $executionScript -Force
@@ -2220,6 +2238,7 @@ Function Invoke-XisfPostCalibrationMonochromeImageWorkflow
         [string]$ApprovalExpression,
         [string]$WeightingExpression,
         [switch]$GenerateDrizzleData,
+        [switch]$GenerateThumbnail,
 
         [Parameter(Mandatory=$false)][decimal]$ClampingThreshold=0.3,        
         [ValidateSet("Auto","Lanczos3","Lanczos4","Bilinear","CubicBSplineFilter","MitchellNetravaliFilter","CatmullRomSplineFilter")]
@@ -2276,12 +2295,12 @@ Function Invoke-XisfPostCalibrationMonochromeImageWorkflow
                     Write-Host "Correcting $($images.Count) Images"
                     Invoke-PiCosmeticCorrection `
                         -Images ($images.Calibrated) `
-                        -UseAutoHot $true `
+                        -UseAutoHot:$true `
                         -HotAutoSigma 40 `
                         -HotDarkLevel 0.4 `
                         -MasterDark $masterDark `
                         -ColdAutoSigma 2.4 `
-                        -UseAutoCold $true `
+                        -UseAutoCold:$true `
                         -OutputPath $CorrectedOutputPath `
                         -PixInsightSlot $PixInsightSlot
                 }
@@ -2445,7 +2464,8 @@ Function Invoke-XisfPostCalibrationMonochromeImageWorkflow
                             -LinearFitHigh:$LinearFitHigh `
                             -PixInsightSlot $PixInsightSlot `
                             -GenerateDrizzleData:$GenerateDrizzleData `
-                            -WeightKeyword:$weightKeyword
+                            -WeightKeyword:$weightKeyword `
+                            -GenerateThumbnail:$GenerateThumbnail
                         }
                         catch {
                             write-warning $_.ToString()
