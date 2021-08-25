@@ -95,6 +95,44 @@ Function Invoke-PixInsightScript
         Pop-Location
     }
 }
+Function ConvertTo-XisfStfThumbnail{
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)][System.IO.FileInfo]$Path,
+        [Parameter(Mandatory=$true)][System.IO.FileInfo]$OutputPath,
+        [Parameter(Mandatory)]$PixInsightSlot,
+        [Switch]$KeepOpen
+    )
+    if(-not $Path){
+        Write-Error "Unable to locate file $Path"
+    }
+    else{
+        $PiPath = $Path | Format-PiPath
+        $PiOutputPath = $OutputPath | Format-PiPath
+        $ScriptToRun = New-TemporaryFile
+        $ScriptToRun = Rename-Item ($ScriptToRun.FullName) ($ScriptToRun.FullName+".scp") -PassThru
+        Write-Debug "creating temporary file $ScriptToRun"
+        $Template="
+        open `"$PiPath`"
+        ImageIdentifier -id=`"Thumbnail`"
+        PixelMath -s=B,C,c -x=`"B = 0.25;C = -1.8;c = min( max( 0, med( Thumbnail ) + C*1.4826*mdev( Thumbnail ) ), 1 );mtf( mtf( B, med( Thumbnail ) - c ), max( 0, (Thumbnail   - c)/~c ) ) `" 
+        save Thumbnail -p=`"$PiOutputPath`" --nodialog --nomessages --noverify
+        close --force Thumbnail
+        "
+        $Template|Out-File $ScriptToRun -Force -Append
+
+        try {
+            Write-Debug "Invoking Script ..."
+            Invoke-PixInsightScript `
+                -PixInsightSlot $PixInsightSlot `
+                -Path $ScriptToRun `
+                -KeepOpen:$KeepOpen
+        }
+        finally {
+            Remove-Item $ScriptToRun -Force
+        }    
+    }
+}
 Function Format-PiPath
 {
     [CmdletBinding()]
@@ -1084,7 +1122,8 @@ Function Invoke-LightFrameSorting
         [System.IO.DirectoryInfo[]]$AdditionalSearchPaths,
         [Parameter(Mandatory=$false)][int]$OutputPedestal = 0,
         [Parameter(Mandatory=$false)][Switch]$KeepOpen,
-        [Parameter(Mandatory=$false)][ScriptBlock]$AfterImageCalibrated
+        [Parameter(Mandatory=$false)][ScriptBlock]$AfterImageCalibrated,
+        [Parameter(Mandatory=$false)][ScriptBlock]$AfterImagesCalibrated
     )
     if($null -eq $XisfStats)
     {
@@ -1149,6 +1188,11 @@ Function Invoke-LightFrameSorting
             if($AfterImageCalibrated){
                 $AfterImageCalibrated.Invoke($_)
             }
+        }
+        if($AfterImagesCalibrated){
+            $AfterImagesCalibrated.Invoke($_.Group)
+        }
+        $_.Group | Foreach-Object {
             Move-Item -Path $_.Path -Destination $archive
         }
     }

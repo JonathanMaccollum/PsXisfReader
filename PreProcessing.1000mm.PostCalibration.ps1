@@ -2,7 +2,7 @@ Clear-Host
 if (-not (get-module psxisfreader)){import-module psxisfreader}
 $ErrorActionPreference="STOP"
 $VerbosePreference="Continue"
-$target="E:\Astrophotography\1000mm\IC1396 Elephants Trunk Nebula"
+$target="E:\Astrophotography\1000mm\NGC7000 Framing 2"
 $alignmentReference=$null 
 
 #$alignmentReference = join-path $target "Eye of Smaug in Cygnus Panel -1.Ha.24x360s.ESD.xisf"
@@ -35,6 +35,9 @@ $alignmentReference=$null
 #$alignmentReference=Join-Path $target "Tulip Panel 2.Ha.44x180s.ESD.xisf"
 #$alignmentReference=Join-Path $target "Tulip Panel 1.Ha.49x180s.ESD.xisf"
 #$alignmentReference = join-path $target "Cave Nebula OSC.Ha.21x180s.ESD.xisf"
+#$alignmentReference = join-path $target "IC1396 Elephants Trunk Nebula.Ha.34x180s.Ha.16x360s.ESD.xisf"
+#$alignmentReference = join-path $target "Lobster Claw in Cepheus.Ha.38x180s.Ha.16x360s.ESD.xisf"
+$alignmentReference = join-path $target "NGC7000 Framing 2.Ha.142x180s.ESD.xisf"
 $rawSubs = 
     Get-XisfLightFrames -Path $target -Recurse -UseCache -SkipOnError |
     #where-object Instrument -eq "QHYCCD-Cameras-Capture (ASCOM)" |
@@ -76,6 +79,7 @@ $data=Invoke-XisfPostCalibrationMonochromeImageWorkflow `
     + 20*(Stars-StarsMin)/(StarsMax-StarsMin))
     + 20" `
     -Rejection "Rejection_ESD" `
+    -GenerateThumbnail `
     -Verbose
 
 $stacked = $data | where-object {$_.Aligned -and (Test-Path $_.Aligned)}

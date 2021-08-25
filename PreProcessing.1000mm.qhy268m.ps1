@@ -50,7 +50,8 @@ $DarkLibrary=($DarkLibraryFiles|group-object Instrument,Gain,Offset,Exposure,Set
     }
 })
 
-
+#Install-module ResizeImageModule
+Import-Module ResizeImageModule
 Import-module "C:\Program Files\N.I.N.A. - Nighttime Imaging 'N' Astronomy\NINA.Astrometry.dll"
 if($null -eq $apiKey){
     $apiKey = Get-Credential -Message "Supply username and apiKey from url: https://app.lightbucket.co/api_credentials"
@@ -59,7 +60,8 @@ Function Update-LightBucketWithNewImageCaptured
 {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)][System.IO.FileInfo]$LightFrame
+        [Parameter(Mandatory)][System.IO.FileInfo]$LightFrame,
+        [Parameter()][Byte[]]$ThumbnailData
     )
     $authString="$($apiKey.UserName):$($apiKey.GetNetworkCredential().Password)"
     $basicToken = [Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes($authString))
@@ -67,7 +69,10 @@ Function Update-LightBucketWithNewImageCaptured
     $headers=$lightFrame|Get-XisfHeader
     $ra = [NINA.Astrometry.AstroUtil]::HMSToDegrees(($headers.xisf.Image.FITSKeyword |? name -eq "OBJCTRA").value)
     $dec = [NINA.Astrometry.AstroUtil]::DMSToDegrees(($headers.xisf.Image.FITSKeyword |? name -eq "OBJCTDEC").value)
-
+    $base64ThumbnailData=$null
+    if($ThumbnailData){
+        $base64ThumbnailData=[Convert]::ToBase64String($ThumbnailData)
+    }
     $request = new-object psobject -Property @{
         image= @{
             filter_name= $stats.Filter
@@ -76,6 +81,7 @@ Function Update-LightBucketWithNewImageCaptured
             offset= $stats.Offset
             binning= "1x1"
             captured_at= $stats.LocalDate.ToUniversalTime().ToString('yyyy-MM-dd HH:mm:ss')
+            thumbnail=$base64ThumbnailData
         }
         target= @{
             name= $stats.Object
@@ -88,6 +94,7 @@ Function Update-LightBucketWithNewImageCaptured
             camera_name=($headers.xisf.Image.FITSKeyword |? name -eq "INSTRUME").value
         }
     } |ConvertTo-Json -Depth 6
+
     #$request
     Invoke-WebRequest `
         -Uri "https://app.lightbucket.co/api/image_capture_complete" `
@@ -101,7 +108,7 @@ Function Update-LightBucketWithNewImageCaptured
 
 while($true){
 
-Get-ChildItem $DropoffLocation *.xisf |
+Get-ChildItem $DropoffLocation Tulip*.xisf |
     Get-XisfFitsStats | 
     where-object Instrument -eq "QHY268m" |
     where-object ImageType -eq "LIGHT" |
@@ -157,8 +164,28 @@ Get-ChildItem $DropoffLocation *.xisf |
                             -PixInsightSlot 200 `
                             -OutputPedestal 70 `
                             -Verbose `
-                            -AfterImageCalibrated {
-                                Update-LightBucketWithNewImageCaptured -LightFrame ($_.Path)
+                            -AfterImagesCalibrated {
+                                param($LightFrames)
+
+                                $Last = $LightFrames | select-object -Last 1
+                                $LightFrames | foreach-object {
+                                    $LightFrame = $_
+                                    $ThumbnailData=$null
+                                    
+                                    if($LightFrame -eq $Last){
+                                        try{
+                                            $OutputFolder = Join-Path $CalibratedOutput $LightFrame.Object
+                                            $calibrated=Get-CalibrationFile -Path ($LightFrame.Path) -CalibratedPath $OutputFolder
+                                            ConvertTo-XisfStfThumbnail -Path $calibrated -OutputPath ($calibrated+".jpeg") -PixInsightSlot 200
+                                            Resize-Image -InputFile ($calibrated+".jpeg") -OutputFile ($calibrated+".small.jpeg") -Width 300 -ProportionalResize $true -Height 300
+                                            $ThumbnailData = Get-Content ($calibrated+".small.jpeg") -AsByteStream
+                                        }
+                                        catch{
+                                            write-warning $_.Exception.ToString()
+                                        }
+                                    }
+                                    Update-LightBucketWithNewImageCaptured -LightFrame ($LightFrame.Path) -ThumbnailData $ThumbnailData
+                                }
                             }
                             
                     }
