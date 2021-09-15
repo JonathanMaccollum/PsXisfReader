@@ -8,7 +8,7 @@
 
 @{
     RootModule="PixInsightPreProcessing.psm1"
-ModuleVersion = '1.0.18'
+ModuleVersion = '1.0.20'
 GUID = '67d4833d-8c25-489b-893e-58f62eb0057b'
 Author = 'Jonathan W. MacCollum'
 Copyright = '(c) Jonathan W. MacCollum. All rights reserved.'
@@ -102,6 +102,7 @@ FunctionsToExport = @(
     'Invoke-XisfPostCalibrationColorImageWorkflow'
     'Invoke-XisfPostCalibrationMonochromeImageWorkflow'
     'Get-MasterDarkLibrary'
+    'ConvertTo-XisfStfThumbnail'
 )
 
 # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.

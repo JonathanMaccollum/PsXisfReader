@@ -2263,6 +2263,7 @@ Function Invoke-XisfPostCalibrationColorImageWorkflow
 }
 Function Invoke-XisfPostCalibrationMonochromeImageWorkflow
 {
+    [CmdletBinding()]
     param(
         [Parameter(Mandatory)][XisfFileStats[]]$RawSubs,
         [Parameter(Mandatory)][System.IO.DirectoryInfo]$CalibrationPath,
@@ -2293,9 +2294,60 @@ Function Invoke-XisfPostCalibrationMonochromeImageWorkflow
         [Parameter(Mandatory=$false)][string]$Rejection = "LinearFit", #Rejection_ESD
         [Parameter(Mandatory=$false)][string]$Normalization = "AdditiveWithScaling", #AdaptiveNormalization
         [Parameter(Mandatory=$false)][string]$RejectionNormalization = "Scale" #AdaptiveRejectionNormalization
-
     )
-    $RawSubs |
+    $OutputFileSuffixWithExtension =""
+    if($SkipCosmeticCorrection){
+        $OutputFileSuffixWithExtension+=".nocc"
+    }
+    if($SkipDebayer){
+        $OutputFileSuffixWithExtension+=".nodebayer"
+    }
+    if($SkipWeighting){
+        $OutputFileSuffixWithExtension+=".noweights"
+    }
+    if($Rejection -eq "LinearFit"){
+        $OutputFileSuffixWithExtension+=".LF.xisf"
+    }
+    elseif($Rejection -eq "Rejection_ESD"){
+        $OutputFileSuffixWithExtension+=".ESD.xisf"
+    }
+    else{
+        $OutputFileSuffixWithExtension+=".$Rejection.xisf"
+    }
+
+    $ToProcess = $RawSubs |
+        group-object Filter |
+        foreach-object {
+            $byFilter = $_.Group
+            $reference = $byFilter[0]
+            $filter=$reference.Filter
+                
+            $outputFileName = $reference.Object
+            $byFilter | group-object Exposure | foreach-object {
+                $exposure=$_.Group[0].Exposure;
+                $outputFileName+=".$filter.$($_.Group.Count)x$($exposure)s"
+            }
+
+            $outputFileName += $OutputFileSuffixWithExtension;
+            new-object psobject -Property @{
+                Filter = $filter
+                IntegratedFile = Join-Path ($IntegratedImageOutputDirectory.FullName) $outputFileName
+                Subs=$byFilter
+            }
+        } |
+        foreach-object {
+            if(Test-Path $_.IntegratedFile){
+                Write-Warning "Filter $($_.Filter) has already been processed: $($_.IntegratedFile)"
+            }
+            else{
+                Write-Verbose "Filter $($_.Filter) estimated to produce file: $($_.IntegratedFile)"
+                $_.Subs
+            }
+        }
+
+    
+
+    $ToProcess |
         Get-XisfCalibrationState `
             -CalibratedPath $CalibrationPath `
             -AdditionalSearchPaths $BackupCalibrationPaths `
@@ -2463,25 +2515,7 @@ Function Invoke-XisfPostCalibrationMonochromeImageWorkflow
                         $outputFileName+=".$filter.$($_.Group.Count)x$($exposure)s"
                     }
 
-                    if($SkipCosmeticCorrection){
-                        $outputFileName+=".nocc"
-                    }
-                    if($SkipDebayer){
-                        $outputFileName+=".nodebayer"
-                    }
-                    if($SkipWeighting){
-                        $outputFileName+=".noweights"
-                    }
-                    if($Rejection -eq "LinearFit"){
-                        $outputFileName+=".LF.xisf"
-                    }
-                    elseif($Rejection -eq "Rejection_ESD"){
-                        $outputFileName+=".ESD.xisf"
-                    }
-                    else{
-                        $outputFileName+=".$Rejection.xisf"
-                    }
-                    
+                    $outputFileName += $OutputFileSuffixWithExtension;
                     $outputFile = Join-Path ($IntegratedImageOutputDirectory.FullName) $outputFileName
                     if(-not (test-path $outputFile)) {
                         write-host ("Integrating  "+ $outputFileName)
