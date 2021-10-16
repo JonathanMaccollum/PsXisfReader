@@ -1,4 +1,4 @@
-﻿[Reflection.Assembly]::Load("System.Text.RegularExpressions") >>$null
+[Reflection.Assembly]::Load("System.Text.RegularExpressions") >>$null
 Function Wait-PixInsightInstance([int]$PixInsightSlot)
 {
     [CmdletBinding]
@@ -1743,7 +1743,7 @@ function  Get-XisfCalibrationState {
                 -Calibrated $calibrated
         }
 
-        Write-Verbose "Searching sub folders for calibrated file $($calibratedFileName)"
+        Write-Debug "Searching sub folders for calibrated file $($calibratedFileName)"
         #try to find a file in any subfolder
         $calibrated = 
             Get-ChildItem $CalibratedPath -Recurse:$Recurse -Filter $calibratedFileName |
@@ -2261,6 +2261,7 @@ Function Invoke-XisfPostCalibrationColorImageWorkflow
             }
         }
 }
+
 Function Invoke-XisfPostCalibrationMonochromeImageWorkflow
 {
     [CmdletBinding()]
