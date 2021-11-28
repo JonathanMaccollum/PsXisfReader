@@ -11,3 +11,4 @@ try{
 finally{
     Pop-Location
 }
+Update-Module PsXisfReader

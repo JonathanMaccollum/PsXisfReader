@@ -536,6 +536,7 @@ Function Invoke-PiLightCalibration
     "var P = new ImageCalibration;
 P.pedestal = 0;
 P.pedestalMode = ImageCalibration.prototype.Keyword;
+P.outputHints = `"properties fits-keywords compression-codec lz4+sh no-embedded-data no-resolution`";
 P.masterBiasEnabled = $masterBiasEnabled;
 P.masterBiasPath = `"$masterBiasPath`";
 P.masterDarkEnabled = $masterDarkEnabled;
@@ -2064,7 +2065,8 @@ Function Invoke-XisfPostCalibrationColorImageWorkflow
                             -HotDarkLevel 0.4 `
                             -MasterDark $masterDark `
                             -OutputPath $CorrectedOutputPath `
-                            -PixInsightSlot $PixInsightSlot
+                            -PixInsightSlot $PixInsightSlot `
+                            -UseAutoHot
                     }
                 }
                 $group |
