@@ -829,6 +829,7 @@ Function Invoke-DarkFlatFrameSorting
         $focalLength=($images[0].FocalLength.ToString().TrimEnd('mm'))+'mm'
         $flatDate = ([DateTime]$images[0].LocalDate).Date.ToString('yyyyMMdd')
         $targetDirectory = "$ArchiveDirectory\$focalLength\Flats"
+        [System.IO.Directory]::CreateDirectory($targetDirectory)>>$null
         $masterDark = "$targetDirectory\$($flatDate).MasterDarkFlat.$($filter).xisf"
         if(-not (Test-Path $masterDark)) {
             Write-Host "Integrating $($images.Count) Dark Flats for $filter at $focalLength"
@@ -2008,9 +2009,71 @@ Function Invoke-XisfPostCalibrationColorImageWorkflow
         [int]$PixInsightSlot,
         [string]$ApprovalExpression,
         [string]$WeightingExpression,
-        [switch]$GenerateDrizzleData
+        [switch]$GenerateDrizzleData,
+        [switch]$GenerateThumbnail,
+        
+        [Parameter(Mandatory=$false)][decimal]$ClampingThreshold=0.3,        
+        [ValidateSet("Auto","Lanczos3","Lanczos4","Bilinear","CubicBSplineFilter","MitchellNetravaliFilter","CatmullRomSplineFilter")]
+        [Parameter(Mandatory=$false)][String]$Interpolation="Auto",
+
+        [Parameter(Mandatory=$false)][decimal]$LinearFitLow=8,
+        [Parameter(Mandatory=$false)][decimal]$LinearFitHigh=7,
+        [Parameter(Mandatory=$false)][string]$Rejection = "LinearFit", #Rejection_ESD
+        [Parameter(Mandatory=$false)][string]$Normalization = "AdditiveWithScaling", #AdaptiveNormalization
+        [Parameter(Mandatory=$false)][string]$RejectionNormalization = "Scale" #AdaptiveRejectionNormalization
     )
-    $RawSubs |
+
+    
+    $OutputFileSuffixWithExtension =""
+    if($SkipCosmeticCorrection){
+        $OutputFileSuffixWithExtension+=".nocc"
+    }
+    if($SkipDebayer){
+        $OutputFileSuffixWithExtension+=".nodebayer"
+    }
+    if($SkipWeighting){
+        $OutputFileSuffixWithExtension+=".noweights"
+    }
+    if($Rejection -eq "LinearFit"){
+        $OutputFileSuffixWithExtension+=".LF.xisf"
+    }
+    elseif($Rejection -eq "Rejection_ESD"){
+        $OutputFileSuffixWithExtension+=".ESD.xisf"
+    }
+    else{
+        $OutputFileSuffixWithExtension+=".$Rejection.xisf"
+    }
+    $ToProcess = $RawSubs |
+        group-object Filter |
+        foreach-object {
+            $byFilter = $_.Group
+            $reference = $byFilter[0]
+            $filter=$reference.Filter
+                
+            $outputFileName = $reference.Object
+            $byFilter | group-object Exposure | foreach-object {
+                $exposure=$_.Group[0].Exposure;
+                $outputFileName+=".$filter.$($_.Group.Count)x$($exposure)s"
+            }
+
+            $outputFileName += $OutputFileSuffixWithExtension;
+            new-object psobject -Property @{
+                Filter = $filter
+                IntegratedFile = Join-Path ($IntegratedImageOutputDirectory.FullName) $outputFileName
+                Subs=$byFilter
+            }
+        } |
+        foreach-object {
+            if(Test-Path $_.IntegratedFile){
+                Write-Warning "Filter $($_.Filter) has already been processed: $($_.IntegratedFile)"
+            }
+            else{
+                Write-Verbose "Filter $($_.Filter) estimated to produce file: $($_.IntegratedFile)"
+                $_.Subs
+            }
+        }
+
+    $ToProcess |
         Get-XisfCalibrationState `
             -CalibratedPath $CalibrationPath `
             -AdditionalSearchPaths $BackupCalibrationPaths `
@@ -2051,9 +2114,6 @@ Function Invoke-XisfPostCalibrationColorImageWorkflow
                     
                     $masterDarkFileName = $_.Name
                     $masterDark = get-childitem $DarkLibraryPath *.xisf -Recurse | where-object {$_.Name -eq $masterDarkFileName} | Select-Object -First 1
-                    #if(-not $masterDark){
-                    #    $masterDark = get-childitem $DarkLibraryPath *.xisf -Recurse | where-object {$_.Name.StartsWith($masterDarkFileName)} | Select-Object -First 1
-                    #}
                     $images = $_.Group
                     Write-Host "Correcting $($images.Count) Images"
                     if(-not $masterDark) {
@@ -2062,11 +2122,15 @@ Function Invoke-XisfPostCalibrationColorImageWorkflow
                     else{
                         Invoke-PiCosmeticCorrection `
                             -Images ($images.Calibrated) `
+                            -UseAutoHot:$true `
+                            -HotAutoSigma 40 `
                             -HotDarkLevel 0.4 `
                             -MasterDark $masterDark `
+                            -ColdAutoSigma 2.4 `
+                            -UseAutoCold:$true `
                             -OutputPath $CorrectedOutputPath `
                             -PixInsightSlot $PixInsightSlot `
-                            -UseAutoHot
+                            -CFAImages
                     }
                 }
                 $group |
@@ -2184,8 +2248,8 @@ Function Invoke-XisfPostCalibrationColorImageWorkflow
                         -Images ($approved.Path) `
                         -ReferencePath ($reference) `
                         -OutputPath $AlignedOutputPath `
-                        -Interpolation Lanczos4 `
-                        -ClampingThreshold 0.2
+                        -Interpolation:$Interpolation `
+                        -ClampingThreshold:$ClampingThreshold
                     $group |
                         Get-XisfAlignedState `
                             -AlignedPath $AlignedOutputPath
@@ -2216,16 +2280,10 @@ Function Invoke-XisfPostCalibrationColorImageWorkflow
                         $exposure=$_.Group[0].Exposure;
                         $outputFileName+=".$filter.$($_.Group.Count)x$($exposure)s"
                     }
-                    if($SkipCosmeticCorrection){
-                        $outputFileName+=".nocc"
-                    }
-                    if($SkipWeighting){
-                        $outputFileName+=".noweights"
-                    }
-                    $outputFileName+=".ESD.xisf"
+                    $outputFileName += $OutputFileSuffixWithExtension;
                     $outputFile = Join-Path ($IntegratedImageOutputDirectory.FullName) $outputFileName
                     if(-not (test-path $outputFile)) {
-                        write-host ("Integrating  "+ $outputFileName)
+                        write-host ("Integrating "+ $outputFileName)
                         $toStack = $byFilter | sort-object SSWeight -Descending
                         $toStack | 
                             Group-Object Filter | 
@@ -2242,12 +2300,15 @@ Function Invoke-XisfPostCalibrationColorImageWorkflow
                             -Images ($toStack|foreach-object {$_.Path}) `
                             -OutputFile $outputFile `
                             -KeepOpen `
-                            -Rejection "Rejection_ESD" `
-                            -LinearFitLow 5 `
-                            -LinearFitHigh 4 `
+                            -Rejection:$Rejection `
+                            -Normalization:$Normalization `
+                            -RejectionNormalization:$RejectionNormalization `
+                            -LinearFitLow:$LinearFitLow `
+                            -LinearFitHigh:$LinearFitHigh `
                             -PixInsightSlot $PixInsightSlot `
                             -GenerateDrizzleData:$GenerateDrizzleData `
-                            -WeightKeyword:$weightKeyword
+                            -WeightKeyword:$weightKeyword `
+                            -GenerateThumbnail:$GenerateThumbnail
                         }
                         catch {
                             write-warning $_.ToString()
