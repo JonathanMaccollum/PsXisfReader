@@ -8,7 +8,7 @@
 
 @{
     RootModule="PixInsightPreProcessing.psm1"
-ModuleVersion = '1.0.24'
+ModuleVersion = '1.0.26'
 GUID = '67d4833d-8c25-489b-893e-58f62eb0057b'
 Author = 'Jonathan W. MacCollum'
 Copyright = '(c) Jonathan W. MacCollum. All rights reserved.'
@@ -41,7 +41,7 @@ PowerShellVersion = '7.0'
 
 # Script files (.ps1) that are run in the caller's environment prior to importing this module.
 ScriptsToProcess = @(
-    "XisfFitsStats.ps1"
+
 )
 
 # Type files (.ps1xml) to be loaded when importing this module

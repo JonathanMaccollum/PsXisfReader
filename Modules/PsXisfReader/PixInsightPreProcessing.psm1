@@ -1,3 +1,5 @@
+. [ScriptBlock]::Create("using module '$PsScriptRoot/PsXisfReader.psm1'")
+
 [Reflection.Assembly]::Load("System.Text.RegularExpressions") >>$null
 Function Wait-PixInsightInstance([int]$PixInsightSlot)
 {
@@ -1759,11 +1761,11 @@ function  Get-XisfCalibrationState {
         if(($AdditionalSearchPaths)){
             Write-Warning "Unable to locate calibration frame... checking additional search paths for $calibratedFileName"
             $calibrated = $AdditionalSearchPaths | 
-                Where-Object { test-path $_ } |
+                Where-Object { test-path $_.FullName } |
                 ForEach-Object { 
                     Get-ChildItem -Recurse:$Recurse -Path $_ -Filter $calibratedFileName
                 } |
-                Where-Object { test-path $_ } | 
+                Where-Object { test-path $_.FullName } | 
                 Select-Object -first 1
             if($calibrated) {
                 return New-XisfPreprocessingState `
@@ -2415,7 +2417,7 @@ Function Invoke-XisfPostCalibrationMonochromeImageWorkflow
         Get-XisfCalibrationState `
             -CalibratedPath $CalibrationPath `
             -AdditionalSearchPaths $BackupCalibrationPaths `
-            -Verbose |
+            -Verbose -Recurse |
         foreach-object {
             $x = $_
             if(-not $x.IsCalibrated()){
