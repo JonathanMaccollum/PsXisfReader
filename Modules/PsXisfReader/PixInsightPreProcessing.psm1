@@ -1,5 +1,3 @@
-. [ScriptBlock]::Create("using module '$PsScriptRoot/PsXisfReader.psm1'")
-
 [Reflection.Assembly]::Load("System.Text.RegularExpressions") >>$null
 Function Wait-PixInsightInstance([int]$PixInsightSlot)
 {
@@ -117,7 +115,7 @@ Function ConvertTo-XisfStfThumbnail{
         $Template="
         open `"$PiPath`"
         ImageIdentifier -id=`"Thumbnail`"
-        PixelMath -s=B,C,c -x=`"B = 0.25;C = -1.8;c = min( max( 0, med( Thumbnail ) + C*1.4826*mdev( Thumbnail ) ), 1 );mtf( mtf( B, med( Thumbnail ) - c ), max( 0, (Thumbnail   - c)/~c ) ) `" 
+        PixelMath -s=B,C,c -x=`"B = 0.25;C = -2.8;c = min( max( 0, med( Thumbnail ) + C*mdev( Thumbnail ) ), 1 );mtf( mtf( B, med( Thumbnail ) - c ), max( 0, (Thumbnail   - c)/~c ) ) `" 
         save Thumbnail -p=`"$PiOutputPath`" --nodialog --nomessages --noverify
         close --force Thumbnail
         "
@@ -224,7 +222,7 @@ save integration -p=`"$output`" --nodialog --nomessages --noverify"
                 -ChildPath ([System.IO.Path]::GetFileNameWithoutExtension($OutputFile)+".jpeg"))
             
         $Template += "
-PixelMath -n+ -id=Thumbnail -s=B,C,c -x=`"B = 0.25;C = -1.8;c = min( max( 0, med( integration ) + C*1.4826*mdev( integration  ) ), 1 );mtf( mtf( B, med( integration  ) - c ), max( 0, (integration  - c)/~c ) ) `"
+PixelMath -n+ -id=Thumbnail -s=B,C,c -x=`"B = 0.25;C = -2.8;c = min( max( 0, med( integration ) + C*mdev( integration  ) ), 1 );mtf( mtf( B, med( integration  ) - c ), max( 0, (integration  - c)/~c ) ) `"
 save Thumbnail -p=`"$thumbnail`" --nodialog --nomessages --noverify"
     }
     $ScriptToRun = New-TemporaryFile
@@ -1759,7 +1757,7 @@ function  Get-XisfCalibrationState {
         }
 
         if(($AdditionalSearchPaths)){
-            Write-Warning "Unable to locate calibration frame... checking additional search paths for $calibratedFileName"
+            Write-Verbose "Unable to locate calibration frame... checking additional search paths for $calibratedFileName"
             $calibrated = $AdditionalSearchPaths | 
                 Where-Object { test-path $_.FullName } |
                 ForEach-Object { 
@@ -1771,6 +1769,9 @@ function  Get-XisfCalibrationState {
                 return New-XisfPreprocessingState `
                     -Stats $XisfFileStats `
                     -Calibrated $calibrated
+            }
+            else{
+                Write-Warning "Unable to locate calibration frame from any search paths: $calibratedFileName"
             }
         }
         
