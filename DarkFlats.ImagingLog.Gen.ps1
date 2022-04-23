@@ -1,3 +1,5 @@
+if (-not (get-module psxisfreader)){import-module psxisfreader}
+$ErrorActionPreference="STOP"
 Import-module "C:\Program Files\N.I.N.A. - Nighttime Imaging 'N' Astronomy\NINA.Astrometry.dll"
 
 Function Format-ExposureTime
@@ -183,55 +185,54 @@ Function Format-MDExposureTableDatesAndObjectOverFilter
 
     Write-Output $result
 }
+@(
+    #40,
+    #50,
+    90
+    135
+    1000
+    )|ForEach-Object{
+        $focalLength=$_
 
-$data = 
-    (Get-XisfLightFrames -Path "E:\Astrophotography\40mm" -Recurse -UseCache -SkipOnError) +
-    (Get-XisfLightFrames -Path "E:\Astrophotography\50mm" -Recurse -UseCache -SkipOnError) +
-    (Get-XisfLightFrames -Path "E:\Astrophotography\135mm" -Recurse -UseCache -SkipOnError) +
-    (Get-XisfLightFrames -Path "E:\Astrophotography\1000mm" -Recurse -UseCache -SkipOnError) |
-    Where-Object {-not $_.HasTokensInPath(@("reject","process","testing","clouds","draft","cloudy","_ez_LS_","drizzle","skyflats","quickedit"))} |
-    Where-Object {$_.LocalDate } |
-    #Where-Object {$_.LocalDate -gt [DateTime]::Today.AddMonths(-1)} |
-    #Where-Object {$_.LocalDate -gt [DateTime]("2020-10-01") -and $_.LocalDate -lt [DateTime]("2020-10-31") } |
-    Where-Object {-not $_.IsIntegratedFile()} 
+        $data = 
+            (Get-XisfLightFrames -Path "E:\Astrophotography\$($focalLength)mm" -SkipOnError -Recurse -UseCache -PathTokensToIgnore @("reject","process","testing","clouds","draft","cloudy","_ez_LS_","drizzle","skyflats","quickedit")) |
+            Where-Object {$_.LocalDate } |
+            Where-Object {-not $_.IsIntegratedFile()} 
 
-$data|
-    Group-Object FocalLength|
-    foreach-object {
-        $focalLength = $_.Group[0].FocalLength
-        $targets = Format-MDExposureTableObjectOverFilter -Data ($_.Group) `
+        if(-not $data){
+
+        }
+
+        $targets = Format-MDExposureTableObjectOverFilter -Data $data `
             -FormatObjectName {
                 param($objectName)
                 "[$objectName](/ImagingLog/$($focalLength)mm/$($objectName.Replace(' ','%20')).html)"
             }
         $targets|Out-File -FilePath "S:\JonsAstro\projects.darkflats.com\source\ImagingLog\Targets.$($focalLength)mm.md" -Force
-    }
 
 
+        $data |
+            group-object Object |
+            foreach-object {
+                new-object psobject -Property @{
+                    Group = ($_.Group)
+                    Object = ($_.Group[0].Object)
+                    FocalLength = $focalLength
+                    IntegrationTime = ($_.Group | Measure-ExposureTime)
+                    Stats = ($_.Group | Measure-Object LocalDate -Minimum -Maximum)
+                }
+            } |
+            foreach-object {
+                $group = $_.Group
+                $object = $_.Object
+                $integrationTime = $_.IntegrationTime
+                $stats=$_.Stats
 
-$data|
-    group-object Object,FocalLength |
-    foreach-object {
-        new-object psobject -Property @{
-            Group = ($_.Group)
-            Object = ($_.Group[0].Object)
-            FocalLength = ($_.Group[0].FocalLength)
-            IntegrationTime = ($_.Group | Measure-ExposureTime)
-            Stats = ($_.Group | Measure-Object LocalDate -Minimum -Maximum)
-        }
-    } |
-    foreach-object {
-        $group = $_.Group
-        $object = $_.Object
-        $focalLength=$_.FocalLength
-        $integrationTime = $_.IntegrationTime
-        $stats=$_.Stats
-
-        $fileName = "$($object).md"
-        $outputDir = "S:\JonsAstro\projects.darkflats.com\source\ImagingLog\$($focalLength)mm"
-        [System.IO.Directory]::CreateDirectory($outputDir)>>$null
-        $file = join-path $outputDir $fileName
-        $content = "---
+                $fileName = "$($object).md"
+                $outputDir = "S:\JonsAstro\projects.darkflats.com\source\ImagingLog\$($focalLength)mm"
+                [System.IO.Directory]::CreateDirectory($outputDir)>>$null
+                $file = join-path $outputDir $fileName
+                $content = "---
 title: $object
 date: $($stats.Maximum.ToString('yyyy-MM-dd HH:mm:ss'))
 ---
@@ -241,16 +242,28 @@ date: $($stats.Maximum.ToString('yyyy-MM-dd HH:mm:ss'))
 
 $(Format-MDExposureTableDatesOverFilter -Data $group -IncludeTotals)
 "
-        $content | out-file $file -Force
-}
+                $content | out-file $file -Force
+            }
 
-$fullTable = Format-MDExposureTableDatesAndObjectOverFilter `
-    -IncludeTotals `
-    -Data $data `
-    -FormatObjectName {
-        param($objectName)
+        $fullTable = Format-MDExposureTableDatesAndObjectOverFilter `
+            -IncludeTotals `
+            -Data $data `
+            -FormatObjectName {
+                param($objectName)
 
-        "[$objectName](/ImagingLog/40mm/$($objectName.Replace(' ','%20')).html)"
+                "[$objectName](/ImagingLog/$($focalLength)mm/$($objectName.Replace(' ','%20')).html)"
+            }
+
+        $fullTable|Out-File -FilePath "S:\JonsAstro\projects.darkflats.com\source\ImagingLog\ImagingLog.$($focalLength)mm.md" -Force
     }
 
-$fullTable|Out-File -FilePath "S:\JonsAstro\projects.darkflats.com\source\ImagingLog\ImagingLog.40mm.md" -Force
+Push-Location "S:\JonsAstro\projects.darkflats.com"
+try{
+    git add -A
+    git commit -m "Updated Imaging Log $([DateTime]::Now.ToString('yyyyMMdd'))"
+    hexo generate
+    & S:\JonsAstro\publishProjectsDarkFlats.ps1
+}
+finally{
+    Pop-Location 
+}
