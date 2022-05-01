@@ -5,7 +5,7 @@
     $DropoffLocation = "D:\Backups\Camera\Dropoff\NINA"
     $ArchiveDirectory="E:\Astrophotography"
     $CalibratedOutput = "F:\PixInsightLT\Calibrated"
-
+<#
     Invoke-DarkFrameSorting `
         -DropoffLocation $DropoffLocation `
         -ArchiveDirectory $ArchiveDirectory `
@@ -20,7 +20,7 @@
         -ArchiveDirectory $ArchiveDirectory `
         -CalibratedFlatsOutput "F:\PixInsightLT\CalibratedFlats" `
         -PixInsightSlot 201
-
+#>
     $DarkLibraryFiles=Get-MasterDarkLibrary `
         -Path "E:\Astrophotography\DarkLibrary\ZWO ASI071MC Pro" `
         -Pattern "^(?<date>\d+).MasterDark.Gain.(?<gain>\d+).Offset.(?<offset>\d+).(?<temp>-?\d+)C.(?<numberOfExposures>\d+)x(?<exposure>\d+)s.xisf$"
@@ -65,7 +65,7 @@
                 ($dark.Offset-eq $offset) -and
                 ($dark.Exposure-eq $exposure) -and
                 #($dark.SetTemp -eq $setTemp)
-                ([Math]::abs($dark.SetTemp - $ccdTemp) -lt 6)
+                ([Math]::abs($dark.SetTemp - $ccdTemp) -lt 1)
             } | select-object -first 1
 
             
@@ -83,7 +83,7 @@
                     foreach-object {
                         $filter = $_.Group[0].Filter
                         $focalLength=$_.Group[0].FocalLength
-                        $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20210503.MasterFlatCal.$filter.xisf"
+                        $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20211212.MasterFlatCal.$filter.xisf"
 
                         if(-not (test-path $masterFlat)) {
                             Write-Warning "Skipping $($_.Group.Count) frames at ($focalLength)mm with filter $filter. Reason: No master flat was found."
@@ -97,7 +97,7 @@
                                 -MasterDark ($masterDark.Path) `
                                 -MasterFlat $masterFlat `
                                 -OutputPath $CalibratedOutput `
-                                -PixInsightSlot 201 `
+                                -PixInsightSlot 200 `
                                 -OutputPedestal 50 `
                                 -Verbose
                         }

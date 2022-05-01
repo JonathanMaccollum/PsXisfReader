@@ -1,28 +1,17 @@
 if (-not (get-module psxisfreader)){import-module psxisfreader}
 
 $ErrorActionPreference="STOP"
-$WarningPreference="Continue"
-$DropoffLocation = "D:\Backups\Camera\Dropoff\NINA"
+
+$DropoffLocation = "D:\Backups\Camera\Dropoff\NINACS"
 $ArchiveDirectory="E:\Astrophotography"
 $CalibratedOutput = "F:\PixInsightLT\Calibrated"
 
-Get-ChildItem E:\Astrophotography\135mm\Flats -Filter 20220328.MasterDarkFlat.R.xisf |
- ForEach-Object {
-     $t=$_.FullName.Replace(".R.",".B.")
-     Copy-Item $_.FullName $t
- }
-
 <#
-Invoke-BiasFrameSorting `
-    -DropoffLocation $DropoffLocation `
-    -ArchiveDirectory $ArchiveDirectory `
-    -PixInsightSlot 201 `
-    -Verbose 
 Invoke-DarkFrameSorting `
     -DropoffLocation $DropoffLocation `
     -ArchiveDirectory $ArchiveDirectory `
     -PixInsightSlot 201 `
-    -Verbose 
+    -Verbose -KeepOpen
 Invoke-DarkFlatFrameSorting `
     -DropoffLocation $DropoffLocation `
     -ArchiveDirectory $ArchiveDirectory `
@@ -32,12 +21,9 @@ Invoke-FlatFrameSorting `
     -ArchiveDirectory $ArchiveDirectory `
     -CalibratedFlatsOutput "F:\PixInsightLT\CalibratedFlats" `
     -PixInsightSlot 201
-exit
 #>
-#exit
-
 $DarkLibraryFiles=Get-MasterDarkLibrary `
-    -Path "E:\Astrophotography\DarkLibrary\QHY268M" `
+    -Path "E:\Astrophotography\DarkLibrary\ZWO ASI071MC Pro" `
     -Pattern "^(?<date>\d+).MasterDark.Gain.(?<gain>\d+).Offset.(?<offset>\d+).(?<temp>-?\d+)C.(?<numberOfExposures>\d+)x(?<exposure>\d+)s.xisf$"
 $DarkLibrary=($DarkLibraryFiles|group-object Instrument,Gain,Offset,Exposure,SetTemp|foreach-object {
     $instrument=$_.Group[0].Instrument
@@ -127,15 +113,15 @@ Function Update-LightBucketWithNewImageCaptured
 
 while($true){
 
-    Get-ChildItem $DropoffLocation *.xisf -ErrorAction Continue |
-        foreach-object { try{ $_ | Get-XisfFitsStats -ErrorAction Continue}catch{} }|
-        where-object Instrument -eq "QHY268m" |
+    Get-ChildItem $DropoffLocation *.xisf |
+        Get-XisfFitsStats | 
+        where-object Instrument -eq "ZWO ASI071MC Pro" |
         where-object ImageType -eq "LIGHT" |
-        where-object FocalLength -eq "135" |
-        #where-object Offset -eq 65 |
-        #where-object Object -eq "m101 at 135mm P1" |
-        #where-object Filter -eq "L" |
-        #select-object -first 5 |
+        where-object FocalLength -eq "90" |
+        where-object Object -ne "StarTrails.20220130" |
+        #where-object Object -eq "LBN406 in Draco" |
+        #Select-Object -Last 1 |
+        #where-object Object -eq "M64 - Black Eye Galaxy Widefield" |
         group-object Instrument,SetTemp,Gain,Offset,Exposure |
         foreach-object {
             $lights = $_.Group
@@ -153,6 +139,7 @@ while($true){
                 ($dark.Gain-eq $gain) -and
                 ($dark.Offset-eq $offset) -and
                 ($dark.Exposure-eq $exposure) -and
+                #($dark.SetTemp -eq $setTemp)
                 ([Math]::abs($dark.SetTemp - $ccdTemp) -lt 3)
             } | select-object -first 1
 
@@ -165,14 +152,9 @@ while($true){
                     foreach-object {
                         $filter = $_.Group[0].Filter
                         $focalLength=$_.Group[0].FocalLength
-                        #$masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20211119.MasterFlatCal.$filter.xisf"
-                        if($filter -eq "Sii3"){
-                            $masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20220327.MasterFlatCal.$filter.xisf" #Sii
-                        }
-                        else{
-                            $masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20220328.MasterFlatCal.$filter.xisf" #LRGB
-                        }
-                        #$masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20211127.MasterFlatCal.$filter.xisf"
+                        #$masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20220227.MasterFlatCal.$filter.xisf"
+                        $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20220425.MasterFlatCal.$filter.F4.Short2.xisf"
+                        
 
                         if($masterFlat -and (-not (test-path $masterFlat))) {
                             Write-Warning "Skipping $($_.Group.Count) frames at ($focalLength)mm with filter $filter. Reason: No master flat was found."
@@ -182,15 +164,14 @@ while($true){
                             Write-Host "Sorting $($_.Group.Count) frames at ($focalLength)mm with filter $filter"
                             Write-Host " Dark: $($masterDark.Path)"
                             Write-Host " Flat: $($masterFlat)"
-                            
+
                             Invoke-LightFrameSorting `
                                 -XisfStats ($_.Group) -ArchiveDirectory $ArchiveDirectory `
-                                <#-MasterBias "E:\Astrophotography\BiasLibrary\QHY268M\20210712.SuperBias.Gain.56.Offset.10.60x0.001s.xisf" -OptimizeDark -CalibrateDark#> `
                                 -MasterDark ($masterDark.Path) `
                                 -MasterFlat $masterFlat `
                                 -OutputPath $CalibratedOutput `
                                 -PixInsightSlot 201 `
-                                -OutputPedestal 70 `
+                                -OutputPedestal 50 `
                                 -Verbose `
                                 -AfterImagesCalibrated {
                                     param($LightFrames)
@@ -226,7 +207,7 @@ while($true){
                                         }
                                     }
                                 }
-                                
+
                         }
                     }
             }

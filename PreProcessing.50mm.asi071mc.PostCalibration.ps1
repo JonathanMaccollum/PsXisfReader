@@ -1,7 +1,7 @@
 if (-not (get-module psxisfreader)){import-module psxisfreader}
 $ErrorActionPreference="STOP"
 
-$target="E:\Astrophotography\50mm\Little Dipper OSC"
+$target="E:\Astrophotography\50mm\Perseus on HD24131"
 #$alignmentReference="E:\Astrophotography\50mm\Orion 50mm\Orion 50mm.Ha3nm.30x6min.ESD.Drizzle2x.xisf"
 $alignmentReference=$null
 Clear-Host
@@ -24,8 +24,8 @@ $data = Invoke-XisfPostCalibrationColorImageWorkflow `
     -AlignedOutputPath "S:\PixInsight\Aligned" `
     -BackupCalibrationPaths @("T:\PixInsightLT\Calibrated","N:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated") `
     -PixInsightSlot 201 `
-    -RerunCosmeticCorrection:$true `
-    -SkipCosmeticCorrection:$false `
+    -RerunCosmeticCorrection:$false `
+    -SkipCosmeticCorrection:$true `
     -RerunWeighting:$false `
     -SkipWeighting:$false `
     -RerunAlignment:$false `

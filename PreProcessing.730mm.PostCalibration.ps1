@@ -3,25 +3,17 @@ Clear-Host
 if (-not (get-module psxisfreader)){import-module psxisfreader}
 $ErrorActionPreference="STOP"
 $VerbosePreference="Continue"
-$target="E:\Astrophotography\40mm\Sh2-126 in Lacerta"
+#$target="E:\Astrophotography\1000mm\Eye of Smaug in Cygnus Panel 2"
+$target="E:\Astrophotography\730mm\IC410 - Tadpoles"
+
+#Get-XisfFitsStats -Path "E:\Astrophotography\1000mm\LDN 1657 in Seagull Panel 1\360.00s\LDN 1657 in Seagull Panel 1_Ha3nm_LIGHT_2021-03-21_21-22-16_0000_360.00s_-15.00_0.49.xisf" |
+#Get-XisfCalibrationState -CalibratedPath "F:\PixInsightLT\Calibrated" -Verbose -AdditionalSearchPaths @("T:\PixInsightLT\Calibrated","N:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated","H:\PixInsightLT\Calibrated") -Recurse
 
 $referenceImages = @(
-    "Cygnus Panel 3.Ha.13x180s.ESD.xisf"
-    "Cygnus Panel 2.Ha.24x180s.ESD.xisf"
-    "Cygnus Panel 1.Ha.24x180s.ESD.xisf"
-    "Cepheus on Lobster Claw.Ha.23x180s.ESD.xisf"
-    "Cepheus on Lion.Ha.31x180s.ESD.xisf"
-    "California on 42Per.Ha.83x360s.ESD.xisf"
-    "Cassiopeia on HR561.Ha.20x180s.ESD.xisf"
-    "Cassiopeia near 12 Cas.Oiii.56x180s.ESD.xisf"
-    "Orion on NGC1788.Ha.31x180s.ESD.xisf"
-    "Orion on Mu Ori.Ha.16x180s.ESD.xisf"
-    "Sh2-240.Oiii.26x180s.ESD.xisf"
-    "Perseus on Theta Persei.Ha.43x180s.ESD.xisf"
-    "Sh2-126 in Lacerta.Ha.50x180s.ESD.xisf"
+    "IC410 - Tadpoles.Ha.77x180s.ESD.xisf"
 )
 $alignmentReference = $null 
-$alignmentReference =
+$alignmentReference = 
     $referenceImages | 
     foreach-object {
         Join-Path $target $_
@@ -33,17 +25,15 @@ if(-not $alignmentReference){
     Wait-Event -Timeout 5
 }
 $rawSubs = 
-    Get-XisfLightFrames -Path $target -Recurse -UseCache -SkipOnError |
+    Get-XisfLightFrames -Path $target -Recurse -UseCache -SkipOnError -PathTokensToIgnore @("reject","process","testing","clouds","draft","cloudy","_ez_LS_","drizzle","quick") |
     #where-object Instrument -eq "QHYCCD-Cameras-Capture (ASCOM)" |
-    where-object Instrument -eq "QHY268M" |
-    Where-Object {-not $_.HasTokensInPath(@("reject","process","testing","clouds","draft","cloudy","_ez_LS_","drizzle","quick"))} |
-    Where-Object Filter -NotIn @("R","B","G") |
+    #where-object Instrument -eq "QHY268M" |
+    #Where-Object Filter -NotIn @("Ha","L3") |
     #Where-Object {-not $_.Filter.Contains("Oiii")} |
-    #Where-Object Filter -ne "V4" |
     #Where-Object Filter -eq "Oiii" |
-    #Where-Object Filter -ne "Ha" |
+    #Where-Object Filter -eq "Ha" |
     #Where-Object Exposure -eq 180 |
-    #Where-object ObsDateMinus12hr -eq ([DateTime]"2021-05-05")
+    #Where-object ObsDateMinus12hr -gt ([DateTime]"2022-02-18") |
     Where-Object {-not $_.IsIntegratedFile()} #|
     #select-object -First 30
 #$rawSubs|Format-Table Path,*
@@ -56,7 +46,7 @@ $data=Invoke-XisfPostCalibrationMonochromeImageWorkflow `
     <#-DarkLibraryPath "E:\Astrophotography\DarkLibrary\QHY268M"#> `
     -DarkLibraryPath "E:\Astrophotography\DarkLibrary\QHYCCD-Cameras-Capture (ASCOM)" `
     -AlignedOutputPath "S:\PixInsight\Aligned" `
-    -BackupCalibrationPaths @("T:\PixInsightLT\Calibrated","N:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated") `
+    -BackupCalibrationPaths @("T:\PixInsightLT\Calibrated","N:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated","H:\PixInsightLT\Calibrated") `
     -PixInsightSlot 200 `
     -RerunCosmeticCorrection:$false `
     -SkipCosmeticCorrection:$false `
@@ -66,7 +56,7 @@ $data=Invoke-XisfPostCalibrationMonochromeImageWorkflow `
     -IntegratedImageOutputDirectory $target `
     -AlignmentReference $alignmentReference `
     -GenerateDrizzleData `
-    -ApprovalExpression "Median<50 && FWHM<2.9" `
+    -ApprovalExpression "Median<400 && FWHM<2.7" `
     -WeightingExpression "(15*(1-(FWHM-FWHMMin)/(FWHMMax-FWHMMin))
     +  5*(1-(Eccentricity-EccentricityMin)/(EccentricityMax-EccentricityMin))
     + 15*(SNRWeight-SNRWeightMin)/(SNRWeightMax-SNRWeightMin)

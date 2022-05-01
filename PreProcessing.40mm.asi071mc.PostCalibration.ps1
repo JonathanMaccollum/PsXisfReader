@@ -1,7 +1,7 @@
 if (-not (get-module psxisfreader)){import-module psxisfreader}
 $ErrorActionPreference="STOP"
 
-$target="E:\Astrophotography\40mm\Patchwork Cygnus 40mm OSC Center"
+$target="E:\Astrophotography\40mm\Large Dark Nebula Complex in Aquila 40mm OSC"
 $alignmentReference=$null
 
 

@@ -5,6 +5,7 @@ $WarningPreference="Continue"
 $DropoffLocation = "D:\Backups\Camera\Dropoff\NINA"
 $ArchiveDirectory="E:\Astrophotography"
 $CalibratedOutput = "F:\PixInsightLT\Calibrated"
+
 <#
 Invoke-BiasFrameSorting `
     -DropoffLocation $DropoffLocation `
@@ -20,14 +21,6 @@ Invoke-DarkFlatFrameSorting `
     -DropoffLocation $DropoffLocation `
     -ArchiveDirectory $ArchiveDirectory `
     -PixInsightSlot 200
-
-@("L","R","G","B","Ha","Oiii","Sii3")|
-    ForEach-Object{
-        $filter=$_
-        get-item "E:\Astrophotography\1000mm\Flats\20220209.MasterDarkFlat.L.xisf" |
-            copy-item -Destination "E:\Astrophotography\1000mm\Flats\20220425.MasterDarkFlat.$($filter).xisf"
-    }
-
 Invoke-FlatFrameSorting `
     -DropoffLocation $DropoffLocation `
     -ArchiveDirectory $ArchiveDirectory `
@@ -120,11 +113,10 @@ Get-ChildItem $DropoffLocation *.xisf |
     Get-XisfFitsStats -ErrorAction:Continue  | 
     where-object Instrument -eq "QHY268m" |
     where-object ImageType -eq "LIGHT" |
-    where-object FocalLength -eq "1000" |
+    where-object FocalLength -eq "90" |
     #where-object ObsDateMinus12hr -eq "1/25/2022 12:00:00 AM" |
     #where-object Offset -eq 65 |
-    #where-object Object -eq "NGC 4535 and NGC 4560" |
-    #Select-Object -First 3 |
+    #where-object Object -eq "Cave Nebula OSC" |
     group-object Instrument,SetTemp,Gain,Offset,Exposure |
     foreach-object {
         $lights = $_.Group
@@ -142,7 +134,7 @@ Get-ChildItem $DropoffLocation *.xisf |
             ($dark.Gain-eq $gain) -and
             ($dark.Offset-eq $offset) -and
             ($dark.Exposure-eq $exposure) -and
-            ([Math]::abs($dark.SetTemp - $ccdTemp) -lt 3)
+            ([Math]::abs($dark.SetTemp - $ccdTemp) -lt 2)
         } | select-object -first 1
 
         if(-not $masterDark){
@@ -154,9 +146,7 @@ Get-ChildItem $DropoffLocation *.xisf |
                 foreach-object {
                     $filter = $_.Group[0].Filter
                     $focalLength=$_.Group[0].FocalLength
-                    $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20220228.MasterFlatCal.$filter.xisf" # 0 degrees
-                    #$masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20220425.MasterFlatCal.$filter.xisf" # 90 degrees
-                    $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20220424.MasterFlatCal.$filter.xisf" # 0 degrees
+                    $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20220214.MasterFlatCal.$filter.xisf"
 
                     if(-not (test-path $masterFlat)) {
                         Write-Warning "Skipping $($_.Group.Count) frames at ($focalLength)mm with filter $filter. Reason: No master flat was found."
@@ -173,7 +163,7 @@ Get-ChildItem $DropoffLocation *.xisf |
                             -MasterDark ($masterDark.Path) `
                             -MasterFlat $masterFlat `
                             -OutputPath $CalibratedOutput `
-                            -PixInsightSlot 201 `
+                            -PixInsightSlot 200 `
                             -OutputPedestal 70 `
                             -Verbose `
                             -AfterImagesCalibrated {
@@ -193,7 +183,7 @@ Get-ChildItem $DropoffLocation *.xisf |
                                             [System.IO.Directory]::CreateDirectory($ThumbnailFolder) >> $null
                                             $ThumbnailFile = Join-Path $ThumbnailFolder ($fileName+".jpeg")
                                             $ThumbnailSmall = Join-Path $ThumbnailFolder ($fileName+".small.jpeg")
-                                            ConvertTo-XisfStfThumbnail -Path $calibrated -OutputPath $ThumbnailFile -PixInsightSlot 201
+                                            ConvertTo-XisfStfThumbnail -Path $calibrated -OutputPath $ThumbnailFile -PixInsightSlot 200
                                             Resize-Image -InputFile $ThumbnailFile -OutputFile $ThumbnailSmall -Width 300 -ProportionalResize $true -Height 300
                                             $ThumbnailData = Get-Content $ThumbnailSmall -AsByteStream
                                         }

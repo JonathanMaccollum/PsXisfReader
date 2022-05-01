@@ -5,13 +5,6 @@ $WarningPreference="Continue"
 $DropoffLocation = "D:\Backups\Camera\Dropoff\NINA"
 $ArchiveDirectory="E:\Astrophotography"
 $CalibratedOutput = "F:\PixInsightLT\Calibrated"
-
-Get-ChildItem E:\Astrophotography\135mm\Flats -Filter 20220328.MasterDarkFlat.R.xisf |
- ForEach-Object {
-     $t=$_.FullName.Replace(".R.",".B.")
-     Copy-Item $_.FullName $t
- }
-
 <#
 Invoke-BiasFrameSorting `
     -DropoffLocation $DropoffLocation `
@@ -37,7 +30,7 @@ exit
 #exit
 
 $DarkLibraryFiles=Get-MasterDarkLibrary `
-    -Path "E:\Astrophotography\DarkLibrary\QHY268M" `
+    -Path "E:\Astrophotography\DarkLibrary\ZWO ASI183MM Pro" `
     -Pattern "^(?<date>\d+).MasterDark.Gain.(?<gain>\d+).Offset.(?<offset>\d+).(?<temp>-?\d+)C.(?<numberOfExposures>\d+)x(?<exposure>\d+)s.xisf$"
 $DarkLibrary=($DarkLibraryFiles|group-object Instrument,Gain,Offset,Exposure,SetTemp|foreach-object {
     $instrument=$_.Group[0].Instrument
@@ -129,13 +122,11 @@ while($true){
 
     Get-ChildItem $DropoffLocation *.xisf -ErrorAction Continue |
         foreach-object { try{ $_ | Get-XisfFitsStats -ErrorAction Continue}catch{} }|
-        where-object Instrument -eq "QHY268m" |
+        where-object Instrument -eq "ZWO ASI183MM Pro" |
         where-object ImageType -eq "LIGHT" |
-        where-object FocalLength -eq "135" |
+        where-object FocalLength -eq "90" |
         #where-object Offset -eq 65 |
-        #where-object Object -eq "m101 at 135mm P1" |
-        #where-object Filter -eq "L" |
-        #select-object -first 5 |
+        #where-object Object -eq "Cepheus on HD204211" |
         group-object Instrument,SetTemp,Gain,Offset,Exposure |
         foreach-object {
             $lights = $_.Group
@@ -165,14 +156,7 @@ while($true){
                     foreach-object {
                         $filter = $_.Group[0].Filter
                         $focalLength=$_.Group[0].FocalLength
-                        #$masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20211119.MasterFlatCal.$filter.xisf"
-                        if($filter -eq "Sii3"){
-                            $masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20220327.MasterFlatCal.$filter.xisf" #Sii
-                        }
-                        else{
-                            $masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20220328.MasterFlatCal.$filter.xisf" #LRGB
-                        }
-                        #$masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20211127.MasterFlatCal.$filter.xisf"
+                        $masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20220117.MasterFlatCal.$filter.xisf"
 
                         if($masterFlat -and (-not (test-path $masterFlat))) {
                             Write-Warning "Skipping $($_.Group.Count) frames at ($focalLength)mm with filter $filter. Reason: No master flat was found."
@@ -189,8 +173,8 @@ while($true){
                                 -MasterDark ($masterDark.Path) `
                                 -MasterFlat $masterFlat `
                                 -OutputPath $CalibratedOutput `
-                                -PixInsightSlot 201 `
-                                -OutputPedestal 70 `
+                                -PixInsightSlot 202 `
+                                -OutputPedestal 200 `
                                 -Verbose `
                                 -AfterImagesCalibrated {
                                     param($LightFrames)
@@ -209,7 +193,7 @@ while($true){
                                                 [System.IO.Directory]::CreateDirectory($ThumbnailFolder) >> $null
                                                 $ThumbnailFile = Join-Path $ThumbnailFolder ($fileName+".jpeg")
                                                 $ThumbnailSmall = Join-Path $ThumbnailFolder ($fileName+".small.jpeg")
-                                                ConvertTo-XisfStfThumbnail -Path $calibrated -OutputPath $ThumbnailFile -PixInsightSlot 201
+                                                ConvertTo-XisfStfThumbnail -Path $calibrated -OutputPath $ThumbnailFile -PixInsightSlot 202
                                                 Resize-Image -InputFile $ThumbnailFile -OutputFile $ThumbnailSmall -Width 300 -ProportionalResize $true -Height 300
                                                 $ThumbnailData = Get-Content $ThumbnailSmall -AsByteStream
                                             }

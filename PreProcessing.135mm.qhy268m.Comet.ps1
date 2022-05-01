@@ -5,13 +5,6 @@ $WarningPreference="Continue"
 $DropoffLocation = "D:\Backups\Camera\Dropoff\NINA"
 $ArchiveDirectory="E:\Astrophotography"
 $CalibratedOutput = "F:\PixInsightLT\Calibrated"
-
-Get-ChildItem E:\Astrophotography\135mm\Flats -Filter 20220328.MasterDarkFlat.R.xisf |
- ForEach-Object {
-     $t=$_.FullName.Replace(".R.",".B.")
-     Copy-Item $_.FullName $t
- }
-
 <#
 Invoke-BiasFrameSorting `
     -DropoffLocation $DropoffLocation `
@@ -127,15 +120,13 @@ Function Update-LightBucketWithNewImageCaptured
 
 while($true){
 
-    Get-ChildItem $DropoffLocation *.xisf -ErrorAction Continue |
-        foreach-object { try{ $_ | Get-XisfFitsStats -ErrorAction Continue}catch{} }|
+    Get-ChildItem $DropoffLocation Comet*.xisf |
+        Get-XisfFitsStats | 
         where-object Instrument -eq "QHY268m" |
         where-object ImageType -eq "LIGHT" |
         where-object FocalLength -eq "135" |
         #where-object Offset -eq 65 |
-        #where-object Object -eq "m101 at 135mm P1" |
-        #where-object Filter -eq "L" |
-        #select-object -first 5 |
+        #where-object Object -eq "Cassiopeia on HD 443 with CED 214" |
         group-object Instrument,SetTemp,Gain,Offset,Exposure |
         foreach-object {
             $lights = $_.Group
@@ -153,40 +144,34 @@ while($true){
                 ($dark.Gain-eq $gain) -and
                 ($dark.Offset-eq $offset) -and
                 ($dark.Exposure-eq $exposure) -and
-                ([Math]::abs($dark.SetTemp - $ccdTemp) -lt 3)
+                ([Math]::abs($dark.SetTemp - $ccdTemp) -lt 2)
             } | select-object -first 1
 
             if(-not $masterDark){
-                Write-Warning "Unable to process $($lights.Count) images: No master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp"
-            }else {
-                Write-Host "Master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp"
+            #     Write-Warning "Unable to process $($lights.Count) images: No master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp"
+            # }else {
+                #Write-Host "Master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp"
                 $lights |
                     group-object Filter,FocalLength |
                     foreach-object {
                         $filter = $_.Group[0].Filter
                         $focalLength=$_.Group[0].FocalLength
-                        #$masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20211119.MasterFlatCal.$filter.xisf"
-                        if($filter -eq "Sii3"){
-                            $masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20220327.MasterFlatCal.$filter.xisf" #Sii
-                        }
-                        else{
-                            $masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20220328.MasterFlatCal.$filter.xisf" #LRGB
-                        }
-                        #$masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20211127.MasterFlatCal.$filter.xisf"
+                        $masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20211127.MasterFlatCal.$filter.xisf"
 
                         if($masterFlat -and (-not (test-path $masterFlat))) {
-                            Write-Warning "Skipping $($_.Group.Count) frames at ($focalLength)mm with filter $filter. Reason: No master flat was found."
+                             Write-Warning "Skipping $($_.Group.Count) frames at ($focalLength)mm with filter $filter. Reason: No master flat was found."
                         }
                         else{
 
                             Write-Host "Sorting $($_.Group.Count) frames at ($focalLength)mm with filter $filter"
-                            Write-Host " Dark: $($masterDark.Path)"
+                            #Write-Host " Dark: $($masterDark.Path)"
                             Write-Host " Flat: $($masterFlat)"
                             
                             Invoke-LightFrameSorting `
                                 -XisfStats ($_.Group) -ArchiveDirectory $ArchiveDirectory `
                                 <#-MasterBias "E:\Astrophotography\BiasLibrary\QHY268M\20210712.SuperBias.Gain.56.Offset.10.60x0.001s.xisf" -OptimizeDark -CalibrateDark#> `
-                                -MasterDark ($masterDark.Path) `
+                                -MasterBias "E:\Astrophotography\BiasLibrary\QHY268M\20210712.MasterBias.Gain.56.Offset.10.60x0.001s.xisf" <# When there's no dark available, bias only?#> `
+                                <#-MasterDark ($masterDark.Path) #>`
                                 -MasterFlat $masterFlat `
                                 -OutputPath $CalibratedOutput `
                                 -PixInsightSlot 201 `

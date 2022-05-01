@@ -4,44 +4,9 @@ if (-not (get-module psxisfreader)){import-module psxisfreader}
 $ErrorActionPreference="STOP"
 $VerbosePreference="Continue"
 $targets = @(
-     "E:\Astrophotography\135mm\Cygnus on HD193701"
-     #"E:\Astrophotography\135mm\Cassiopeia on HD 443 with CED 214"
-     #"E:\Astrophotography\135mm\Heart and Double Cluster in Cassiopeia"
-     #"E:\Astrophotography\135mm\sh2-240"
-     #"E:\Astrophotography\135mm\sh2-202 in Cassiopeia"
-     #"E:\Astrophotography\135mm\DL Camelopardalis"
-     #"E:\Astrophotography\135mm\Taurus Molecular Cloud with vdb31"
-     #"E:\Astrophotography\135mm\Comet C2021 A1 Leonard Framing 4"
-     #"E:\Astrophotography\135mm\sh2-202 in Cassiopeia"
-     #"E:\Astrophotography\135mm\Cepheus on HD204211"
-     #"E:\Astrophotography\135mm\Abell 31"
-     #"E:\Astrophotography\135mm\Cepheus on HD218724"
-     #"E:\Astrophotography\135mm\Cone to Sh2-284 Panel 1"
-     #"E:\Astrophotography\135mm\Cone to Sh2-284 Panel 2"
-     #"E:\Astrophotography\135mm\Orion on HD290890"
-     #"E:\Astrophotography\135mm\NGC3344 at 135mm"
-     #"E:\Astrophotography\135mm\m101 at 135mm P1"
-     #"E:\Astrophotography\135mm\m101 at 135mm P2"
-     #"E:\Astrophotography\135mm\m101 at 135mm P3"
+     "E:\Astrophotography\90mm\Abell 35"
 )
 $referenceImages = @(
-    "Cygnus on HD193701.Ha.80x180s.ESD.xisf"
-    "Cassiopeia on HD 443 with CED 214.Ha.39x180s.ESD.xisf"
-    "Heart and Double Cluster in Cassiopeia.Ha.69x180s.ESD.xisf"
-    "Sh2-240.Ha.111x180s.ESD.xisf"
-    "DL Camelopardalis.Ha.27x180s.ESD.xisf"
-    "sh2-202 in Cassiopeia.Ha.64x180s.ESD.xisf"
-    "Taurus Molecular Cloud with vdb31.L.62x90s.ESD.xisf"
-    "Comet C2021 A1 Leonard with M3.G.84x45s.ESD.xisf"
-    "Cepheus on HD218724.Sii3.100x180s.ESD.xisf"
-    "Cepheus on HD204211.Ha.112x180s.ESD.xisf"
-    "Cone to Sh2-284 Panel 1.Ha.44x180s.ESD.xisf"
-    "Cone to Sh2-284 Panel 2.Ha.55x180s.ESD.xisf"
-    "Abell 31.R.90x90s.ESD.xisf"
-    "_NGC3344 at 135mm.L.276x90s.ESD.xisf"
-    "m101 at 135mm P1.L.42x90s.ESD.xisf"
-    "m101 at 135mm P2.L.128x90s.ESD.xisf"
-    "m101 at 135mm P3.L.106x90s.ESD.xisf"
 )
 
 $targets | foreach-object {
@@ -62,9 +27,9 @@ $targets | foreach-object {
     $rawSubs = 
         Get-XisfLightFrames -Path $target -Recurse -UseCache -SkipOnError |
         #where-object Instrument -eq "QHYCCD-Cameras-Capture (ASCOM)" |
-        where-object Instrument -eq "QHY268M" |
+        where-object Instrument -eq "ZWO ASI183MM Pro" |
         Where-Object {-not $_.HasTokensInPath(@("reject","process","planning","testing","clouds","draft","cloudy","_ez_LS_","drizzle","quick"))} |
-        #Where-Object Filter -In @("R","B","G") |
+        #Where-Object Filter -NotIn @("R","B","G","Sii3") |
         #Where-Object {-not $_.Filter.Contains("Oiii")} |
         #Where-Object Filter -ne "V4" |
         #Where-Object Filter -eq "R" |
@@ -81,7 +46,7 @@ $targets | foreach-object {
         -CorrectedOutputPath "S:\PixInsight\Corrected" `
         -WeightedOutputPath "S:\PixInsight\Weighted" `
         <#-DarkLibraryPath "E:\Astrophotography\DarkLibrary\QHY268M"#> `
-        -DarkLibraryPath "E:\Astrophotography\DarkLibrary\QHYCCD-Cameras-Capture (ASCOM)" `
+        -DarkLibraryPath "E:\Astrophotography\DarkLibrary\ZWO ASI183MM Pro" `
         -AlignedOutputPath "S:\PixInsight\Aligned" `
         -BackupCalibrationPaths @("T:\PixInsightLT\Calibrated","N:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated") `
         -PixInsightSlot 201 `
@@ -93,7 +58,7 @@ $targets | foreach-object {
         -IntegratedImageOutputDirectory $target `
         -AlignmentReference $alignmentReference `
         -GenerateDrizzleData `
-        -ApprovalExpression "Median<42 && FWHM<1.6 && Stars > 8000" `
+        -ApprovalExpression "Median<60 && FWHM<1.41 && Stars > 1800" `
         -WeightingExpression "(15*(1-(FWHM-FWHMMin)/(FWHMMax-FWHMMin))
         +  5*(1-(Eccentricity-EccentricityMin)/(EccentricityMax-EccentricityMin))
         + 15*(SNRWeight-SNRWeightMin)/(SNRWeightMax-SNRWeightMin)
