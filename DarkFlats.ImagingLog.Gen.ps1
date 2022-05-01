@@ -25,7 +25,32 @@ Function Format-MDExposureTableDatesOverFilter
     )
 
     $result="| Date | "
-        $byFilter = $Data | group-object Filter
+        $byFilter = $Data | group-object Filter | sort-object {
+            if($_.Name.StartsWith("L")){
+                1
+            }
+            elseif($_.Name.StartsWith("R")){
+                2
+            }
+            elseif($_.Name.StartsWith("G")){
+                3
+            }
+            elseif($_.Name.StartsWith("B")){
+                4
+            }
+            elseif($_.Name.StartsWith("H")){
+                5
+            }
+            elseif($_.Name.StartsWith("O")){
+                6
+            }
+            elseif($_.Name.StartsWith("S")){
+                7
+            }
+            else{
+                8
+            }
+        }
         $byFilter | foreach-object {
             $result += $_.Name + " | "
         }
@@ -195,7 +220,7 @@ Function Format-MDExposureTableDatesAndObjectOverFilter
         $focalLength=$_
 
         $data = 
-            (Get-XisfLightFrames -Path "E:\Astrophotography\$($focalLength)mm" -SkipOnError -Recurse -UseCache -PathTokensToIgnore @("reject","process","testing","clouds","draft","cloudy","_ez_LS_","drizzle","skyflats","quickedit")) |
+            (Get-XisfLightFrames -Path "E:\Astrophotography\$($focalLength)mm" -SkipOnError -Recurse -UseCache -PathTokensToIgnore @("reject","process","testing","clouds","draft","cloudy","_ez_LS_","drizzle","skyflats","quickedit","calibrated")) |
             Where-Object {$_.LocalDate } |
             Where-Object {-not $_.IsIntegratedFile()} 
 
