@@ -1,11 +1,12 @@
-import-module $PSScriptRoot/PsXisfReader.psd1 -Force
+#import-module $PSScriptRoot/PsXisfReader.psd1 -Force
 $ErrorActionPreference="STOP"
 
 Clear-Host
 
 $data =
     (Get-ChildItem "E:\Astrophotography\50mm" -Directory -Filter "PatchworkCygnus*") |
-    # (Get-ChildItem "E:\Astrophotography\135mm" -Directory -Filter "Sadr*") +
+    #(Get-ChildItem "E:\Astrophotography\50mm" -Directory -Filter "Ceph*") +
+    #(Get-ChildItem "E:\Astrophotography\135mm" -Directory -Filter "Sadr*") +
     # (Get-ChildItem "E:\Astrophotography\135mm" -Directory -Filter "Squid*") +
     # (Get-ChildItem "E:\Astrophotography\135mm" -Directory -Filter "PatchworkCygnus*") +
     # (Get-ChildItem "E:\Astrophotography\1000mm" -Directory -Filter "Sadr*") +
@@ -13,11 +14,12 @@ $data =
     # (Get-ChildItem "E:\Astrophotography\1000mm" -Directory -Filter "Sh 2-108*") +
     # (Get-ChildItem "E:\Astrophotography\1000mm" -Directory -Filter "Eye of*") +
     # (Get-ChildItem "E:\Astrophotography\1000mm" -Directory -Filter "Ring Nebula") +
-    # (Get-ChildItem "E:\Astrophotography\135mm" -Directory -Filter "DWB*") |
+     #(Get-ChildItem "E:\Astrophotography\135mm" -Directory -Filter "DWB*") |
     ForEach-Object {Get-XisfLightFrames -Path $_ -Recurse -UseCache } |
     Where-Object {-not $_.HasTokensInPath(@("reject","process","testing","clouds","draft","cloudy"))} |
     Where-Object {-not $_.IsIntegratedFile()} |
-    Where-Object {$_.Filter}
+    Where-Object {$_.Filter} |
+    Where-Object {$_.Filter -ne "L3"}
 
 $filters = $data|Group-Object Filter|ForEach-Object{$_.Name}
 $stats=$data|
@@ -90,8 +92,8 @@ $stats=$data|
         $x
     }
 
-$stats|    Format-Table Object,FocalLength,"Combined Ha","Combined Oiii","Combined Sii","Total Ha","Total Oiii","Total Sii","Total L3","Total L","Total R","Total G","Total B","Total Combined"
-$stats|    Format-Table Object,FocalLength,"Last BHS_Ha","Last Ha","Last BHS_Oiii","Last Oiii","Last Sii","Last L3","Last L","Last R","Last G","Last B","Total Combined"
+$stats|    Format-Table Object,"Combined Ha","Combined Oiii","Combined Sii","Total Combined"
+$stats|    Format-Table Object,"Last BHS_Ha","Last Ha","Last BHS_Oiii","Last BHS_Sii","Total Combined"
 
 $minDate=($data|Measure-Object ObsDateMinus12hr -Minimum).Minimum
 $maxDate=($data|Measure-Object ObsDateMinus12hr -Maximum).Maximum

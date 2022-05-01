@@ -1,25 +1,37 @@
 import-module $PSScriptRoot/PsXisfReader.psd1 -Force
 $ErrorActionPreference="STOP"
 $VerbosePreference="Continue"
-$target="E:\Astrophotography\50mm\Taurus to Pleiades 2 50mm"
+$target="E:\Astrophotography\1000mm\Heart Nebula"
+$outputPath = "E:\PixInsightLT\ReCalibrated"
 $WhatIf=$false
 $DarkLibraryFiles = Get-MasterDarkLibrary `
     -Path "E:\Astrophotography\DarkLibrary\ZWO ASI183MM Pro" `
     -Pattern "^(?<date>\d+).MasterDark.Gain.(?<gain>\d+).Offset.(?<offset>\d+).(?<temp>-?\d+)C.(?<numberOfExposures>\d+)x(?<exposure>\d+)s.xisf$"
-$FlatFiles = Get-ChildItem "E:\Astrophotography\50mm\Flats" -File *.xisf |
+$FlatFiles = 
+    @(Get-ChildItem "D:\Backups\Camera\2019\20191027.Flats.Newt.Efw" -File *.xisf) +
+    @(Get-ChildItem "D:\Backups\Camera\2019\20190929.Flats.Newt.Efw" -File *.xisf) |
     Get-XisfFitsStats
 $rawSubs =
     Get-XisfLightFrames -Path $target -Recurse -UseCache -SkipOnError |
     Where-Object {-not $_.HasTokensInPath(@("reject","process","testing","clouds","draft","cloudy","_ez_LS_"))} |
-    Where-Object {-not $_.IsIntegratedFile()} 
+    Where-Object {-not $_.IsIntegratedFile()}  |
+    Where-Object Object -eq "Melotte 15 Panel 2"
 
 $calibrationState = $rawSubs |
-    Get-XisfCalibrationState -CalibratedPath "E:\PixInsightLT\Calibrated" | 
+    Get-XisfCalibrationState -CalibratedPath "E:\PixInsightLT\Calibrated\Melotte 15 Panel 2\Old" | 
     foreach-object {
         $calibratedFile = $_.Calibrated | Get-XisfFitsStats
         $state=New-XisfPreprocessingState -Stats $calibratedFile 
         $dark = $DarkLibraryFiles | where-object {$_.Path.Name -eq $state.MasterDark}
         $flat = $FlatFiles | where-object {$_.Path.Name -eq $state.MasterFlat}
+
+        if(-not $dark){
+            Write-Warning "Unable to locate dark $($state.MasterDark)"
+        }
+        if(-not $flat){
+            Write-Warning "Unable to locate flat $($state.MasterFlat)"
+        }
+
         new-object psobject -Property @{
             Path=$_.Path
             MasterDark = $dark.Path
@@ -49,7 +61,8 @@ $calibrationState|group-object MasterFlat,MasterDark,Pedestal,Gain,Offset,SetTem
                 ($dark.Exposure -eq $exposure) -and 
                 ($dark.Gain -eq $gain) -and 
                 ($dark.Offset -eq $offset) -and 
-                ($dark.SetTemp -eq $setTemp)
+                #($dark.SetTemp -eq $setTemp) -and
+                1-eq 1
             }
         $availableDarks|ForEach-Object {
             Write-Host "Available Dark: $($_.Path)"
@@ -71,8 +84,8 @@ $calibrationState|group-object MasterFlat,MasterDark,Pedestal,Gain,Offset,SetTem
                 -Images ($files.Path) `
                 -MasterDark ($latestDark.Path) `
                 -MasterFlat $masterFlat `
-                -OutputPath "E:\PixInsightLT\ReCalibrated" `
-                -OutputPedestal 200 -KeepOpen
+                -OutputPath $outputPath `
+                -OutputPedestal 200 
             }else{
                 Write-Host "What-If was set... no calibration was performed."
             }

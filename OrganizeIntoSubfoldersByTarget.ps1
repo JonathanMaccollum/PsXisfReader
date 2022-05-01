@@ -1,12 +1,9 @@
-Import-Module $PSScriptRoot/PsXisfReader.psm1 -Force
-Import-Module $PSScriptRoot/PixInsightPreProcessing.psm1
-
-$path = "E:\PixInsightLT\Calibrated"
-
-$path|Get-ChildItem  -File |
+Import-Module PsXisfReader
+$path = "H:\PixInsightLT\Calibrated"
+Get-ChildItem $path -File |
     Get-XisfFitsStats |
     Where-Object Object -ne $null |
-    Select-Object -First 13000 |
+    Select-Object -First 3000 |
     foreach-object {
         $x=$_
         $object = $x.Object
@@ -14,5 +11,7 @@ $path|Get-ChildItem  -File |
         [System.IO.Directory]::CreateDirectory($targetDirectory) > $null
 
         $targetFile = Join-Path $targetDirectory ($x.Path.Name)
-        Move-Item ($x.Path) -Destination $targetFile
+        if(-not (test-path $targetFile)){
+            Move-Item ($x.Path) -Destination $targetFile
+        }        
     }

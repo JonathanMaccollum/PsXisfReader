@@ -1,7 +1,10 @@
+import-module $PSScriptRoot/PsXisfReader.psd1 -Force
+
 $calibrated = 
-    Get-XisfLightFrames -Path $target -Recurse |
+    Get-XisfLightFrames -Path "E:\Astrophotography\1000mm\Heart Nebula - Row 2 Panel 3" -Recurse |
     Where-Object {-not $_.HasTokensInPath(@("reject","process","testing","clouds","draft","cloudy"))} |
     Where-Object {-not $_.IsIntegratedFile()} |
+    Where-Object Filter -eq "Oiii" |
     Get-XisfCalibrationState `
     -CalibratedPath $CalibrationPath `
     -AdditionalSearchPaths $BackupCalibrationPaths `
@@ -24,7 +27,7 @@ $calibrated|
             OutputPedestal = $outputPedestal
         }    
     } | 
-    where-object OutputPedestal -ne 200 |
+    #where-object OutputPedestal -ne 200 |
     group-object Bias,Dark,Flat,OutputPedestal |
     foreach-object {
         $x=$_
@@ -34,13 +37,13 @@ $calibrated|
         $bias=$x.Group[0].Bias
         $files = $x.Group|%{$_.File.Path}
         Write-Host "$($files.Count) x $flat $dark $outputPedestal"
+        write-host " - $dark"
+        write-host " - $flat"
         Invoke-PiLightCalibration `
-            -KeepOpen `
             -PixInsightSlot 200 `
             -Images $files `
-            -OutputPedestal 200 `
-            -OutputPath "E:\PixInsightLT\Calibrated\PatchworkCygnus_0_1b" `
-            -MasterDark "E:\Astrophotography\DarkLibrary\ZWO ASI183MM Pro\$dark" `
-            -MasterFlat "E:\Astrophotography\50mm\Flats\$flat" `
+            -OutputPath "E:\PixInsightLT\Calibrated\LDN1251 OSC\C2" `
+            -MasterDark "E:\Astrophotography\DarkLibrary\ZWO ASI071MC Pro\20201020.MasterDark.Gain.90.Offset.65.-15C.124x240s.xisf" `
+            -MasterFlat "E:\Astrophotography\1000mm\Flats\$flat" `
             -Verbose
     }

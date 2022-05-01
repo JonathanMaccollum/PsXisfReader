@@ -213,8 +213,8 @@ Function Format-MDExposureTableDatesAndObjectOverFilter
 @(
     #40,
     #50,
-    90
-    135
+    #90
+    #135
     1000
     )|ForEach-Object{
         $focalLength=$_

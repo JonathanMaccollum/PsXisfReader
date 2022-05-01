@@ -1,15 +1,15 @@
 import-module $PSScriptRoot/PsXisfReader.psd1 -Force
 $ErrorActionPreference="STOP"
 
-$target="E:\Astrophotography\50mm\PatchworkCygnus_1_1"
-$CalibrationPath = "E:\PixInsightLT\Calibrated"
+$target="E:\Astrophotography\50mm\Flaming Star Region 50mm"
+$CalibrationPath = "F:\PixInsightLT\Calibrated"
 $CorrectedOutputPath = "S:\PixInsight\Corrected"
 $WeightedOutputPath = "S:\PixInsight\Weighted"
 $AlignedOutputPath = "S:\PixInsight\Aligned"
 $BackupCalibrationPaths = @("T:\PixInsightLT\Calibrated","N:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated")
 $RerunWeighting=$true
 $RerunAlignment=$true
-$CreateSuperLuminance=$true
+$CreateSuperLuminance=$false
 $alignmentReference=$null
 #$alignmentReference="PatchworkCygnus_0_3.BHS_Ha.11x240s.BHS_Ha.6x300s.BHS_Ha.5x600s.xisf"
 #$alignmentReference="PatchworkCygnus_0_4.BHS_Ha.36x300s.Adaptive.xisf"
@@ -21,18 +21,18 @@ $alignmentReference=$null
 #$alignmentReference="PatchworkCygnus_2_1.BHS_Ha.22x360s.Adaptive.BHS_Ha.15x600s.Adaptive.xisf"
 #$alignmentReference="PatchworkCygnus_2_2.BHS_Ha.15x600s.xisf"
 #$alignmentReference="PatchworkCygnus_2_4.BHS_Ha.10x300s.BHS_Ha.2x360s.Adaptive.xisf"
-#$alignmentReference="Ceph50mm.BHS_Ha.4x300s.BHS_Ha.4x360s.BHS_Ha.42x600s.Adaptive.ESD.xisf"
-Clear-Host
+#$alignmentReference="Soul Nebula.BHS_Ha.13x600s.Adaptive.ESD.xisf"
+#$alignmentReference="Cassiopeia.BHS_Ha.10x600s.Adaptive.ESD.xisf"
+#Clear-Host
 $data =
-    Get-XisfLightFrames -Path $target -Recurse |
+    Get-XisfLightFrames -Path $target -Recurse -UseCache -SkipOnError |
     Where-Object {-not $_.HasTokensInPath(@("reject","process","testing","clouds","draft","cloudy"))} |
-    Where-Object Filter -eq BHS_Oiii |
-    #Where-Object Filter -ne BHS_Sii |
+    #Where-Object Filter -ne "BHS_Ha" |
+    #Where-Object Filter -eq "BHS_OIII" |
     Where-Object {-not $_.IsIntegratedFile()} |
     Get-XisfCalibrationState `
         -CalibratedPath $CalibrationPath `
-        -AdditionalSearchPaths $BackupCalibrationPaths `
-        -Verbose |
+        -AdditionalSearchPaths $BackupCalibrationPaths |
     foreach-object {
         $x = $_
         if(-not $x.IsCalibrated()){
@@ -105,7 +105,7 @@ $data =
                     -PixInsightSlot 200 `
                     -OutputPath $WeightedOutputPath `
                     -Images ($byFilter.Corrected) `
-                    -ApprovalExpression "Median<100 && FWHM<4.5" `
+                    -ApprovalExpression "Median<120 && FWHM<4.5" `
                     -WeightingExpression "(15*(1-(FWHM-FWHMMin)/(FWHMMax-FWHMMin))
                     +  5*(1-(Eccentricity-EccentricityMin)/(EccentricityMax-EccentricityMin))
                     + 05*(SNRWeight-SNRWeightMin)/(SNRWeightMax-SNRWeightMin)
@@ -182,20 +182,27 @@ $data =
                 $filter=$_.Group[0].Filter;
                 $outputFileName+=".$filter.$($_.Group.Count)x$($exposure)s"
             }
-            $outputFileName+=".Adaptive.xisf"
+            $outputFileName+=".ESD.xisf"
             $outputFile = Join-Path $target $outputFileName
 
+            $toStack = $approved | sort-object SSWeight -Descending
+            $toStack|Group-Object Filter | %{$dur=$_.Group|Measure-ExposureTime -TotalSeconds; new-object psobject -Property @{Filter=$_.Name; ExposureTime=$dur}}
+            $toStack | 
+                Group-Object Filter | 
+                foreach-object {$dur=$_.Group|Measure-ExposureTime -TotalSeconds; new-object psobject -Property @{Filter=$_.Name; ExposureTime=$dur}} |
+                foreach-object {
+                    write-host "$($_.Filter): $($_.ExposureTime)"
+                }
 
             if((-not (test-path $outputFile)) -and $CreateSuperLuminance) {
                 write-host ("Creating super luminance "+ $outputFileName)
-                $toStack = $approved | sort-object SSWeight -Descending
+                
                 Invoke-PiLightIntegration `
                     -Images ($toStack|foreach-object {$_.Path}) `
                     -OutputFile $outputFile `
                     -KeepOpen `
                     -GenerateDrizzleData `
-                    -Normalization "AdaptiveNormalization" `
-                    -RejectionNormalization "AdaptiveRejectionNormalization" `
+                    -Rejection "Rejection_ESD" `
                     -LinearFitLow 5 `
                     -LinearFitHigh 4 `
                     -PixInsightSlot 200
@@ -212,18 +219,23 @@ $data =
                     $exposure=$_.Group[0].Exposure;
                     $outputFileName+=".$filter.$($_.Group.Count)x$($exposure)s"
                 }
-                $outputFileName+=".Adaptive.xisf"
+                $outputFileName+=".ESD.xisf"
                 $outputFile = Join-Path $target $outputFileName
                 if(-not (test-path $outputFile)) {
                     write-host ("Integrating  "+ $outputFileName)
                     $toStack = $byFilter | sort-object SSWeight -Descending
+                    $toStack | 
+                        Group-Object Filter | 
+                        foreach-object {$dur=$_.Group|Measure-ExposureTime -TotalSeconds; new-object psobject -Property @{Filter=$_.Name; ExposureTime=$dur}} |
+                        foreach-object {
+                            write-host "$($_.Filter): $($_.Exposure)"
+                        }
                     try {
                         Invoke-PiLightIntegration `
                         -Images ($toStack|foreach-object {$_.Path}) `
                         -OutputFile $outputFile `
                         -KeepOpen `
-                        -Normalization "AdaptiveNormalization" `
-                        -RejectionNormalization "AdaptiveRejectionNormalization" `
+                        -Rejection "Rejection_ESD" `
                         -LinearFitLow 5 `
                         -LinearFitHigh 4 `
                         -PixInsightSlot 200
@@ -241,10 +253,19 @@ $data =
         }
     }
 
-$mostRecent=
-    $data.Stats|
-    Sort-Object LocalDate -desc |
-    Select-Object -first 1
+
+$stacked = $data | where-object {$_.Aligned -and (Test-Path $_.Aligned)}
+$toReject = $data | where-object {-not $_.Aligned -or (-not (Test-Path $_.Aligned))}
+Write-Host "Stacked: $($stacked.Stats | Measure-ExposureTime -TotalMinutes)"
+Write-Host "Rejected: $($toReject.Stats | Measure-ExposureTime -TotalMinutes)"
+if($toReject -and (Read-Host -Prompt "Move $($toReject.Count) Rejected files?") -eq "Y"){
+    [System.IO.Directory]::CreateDirectory("$target\Rejection")>>$null
+    $toReject | foreach-object {
+        if($_.Path -and (test-path $_.Path)){
+            Move-Item ($_.Path) -Destination "$target\Rejection\" -Verbose
+        }
+    }
+}
 
 $data | Export-Clixml -Path (Join-Path $target "Stats.$($mostRecent.LocalDate.ToString('yyyyMMdd HHmmss')).clixml")
 
