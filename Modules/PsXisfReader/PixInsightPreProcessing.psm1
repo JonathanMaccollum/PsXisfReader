@@ -1597,6 +1597,7 @@ class XisfPreprocessingState {
     [XisfFileStats]$Stats
     [System.IO.FileInfo]$Path
 
+    [string]$MasterBias
     [string]$MasterDark
     [string]$MasterFlat
 
@@ -1694,6 +1695,7 @@ function New-XisfPreprocessingState {
     [OutputType([XisfPreprocessingState])]
     param(
         [Parameter(Mandatory=$true)][XisfFileStats]$Stats,
+        [Parameter(Mandatory=$false)][string]$MasterBias,
         [Parameter(Mandatory=$false)][string]$MasterDark,
         [Parameter(Mandatory=$false)][string]$MasterFlat,
 
@@ -1703,7 +1705,12 @@ function New-XisfPreprocessingState {
         [Parameter(Mandatory=$false)][System.IO.FileInfo]$Weighted,
         [Parameter(Mandatory=$false)][System.IO.FileInfo]$Aligned
     )
-
+    if((-not $MasterBias) -and ($Stats.History)) {
+        $MasterBias = $Stats.History |
+            where-object {$_.StartsWith("ImageCalibration.masterBias.fileName")} |
+            foreach-object {$_.Split(":")[1].Trim()} |
+            select-object -First 1
+    }
     if((-not $MasterDark) -and ($Stats.History)) {
         $MasterDark = $Stats.History |
             where-object {$_.StartsWith("ImageCalibration.masterDark.fileName")} |
@@ -1720,6 +1727,7 @@ function New-XisfPreprocessingState {
     [XisfPreprocessingState]@{
         Stats      = $Stats
         Path       = $Stats.Path
+        MasterBias = $MasterBias
         MasterDark = $MasterDark
         MasterFlat = $MasterFlat
         Calibrated = $Calibrated
@@ -1830,6 +1838,7 @@ function Get-XisfCosmeticCorrectionState{
             return New-XisfPreprocessingState `
                 -Stats $XisfFileStats `
                 -Calibrated $State.Calibrated `
+                -MasterBias $State.MasterBias `
                 -MasterDark $State.MasterDark `
                 -MasterFlat $State.MasterFlat `
                 -Corrected $cosmeticallyCorrected
@@ -1841,6 +1850,7 @@ function Get-XisfCosmeticCorrectionState{
             return New-XisfPreprocessingState `
                 -Stats $XisfFileStats `
                 -Calibrated $State.Calibrated `
+                -MasterBias $State.MasterBias `
                 -MasterDark $State.MasterDark `
                 -MasterFlat $State.MasterFlat `
                 -Corrected $cosmeticallyCorrected
@@ -1878,6 +1888,7 @@ function Get-XisfDebayerState{
             return New-XisfPreprocessingState `
                 -Stats $XisfFileStats `
                 -Calibrated $State.Calibrated `
+                -MasterBias $State.MasterBias `
                 -MasterDark $State.MasterDark `
                 -MasterFlat $State.MasterFlat `
                 -Corrected $State.Corrected `
@@ -1890,6 +1901,7 @@ function Get-XisfDebayerState{
             return New-XisfPreprocessingState `
                 -Stats $XisfFileStats `
                 -Calibrated $State.Calibrated `
+                -MasterBias $State.MasterBias `
                 -MasterDark $State.MasterDark `
                 -MasterFlat $State.MasterFlat `
                 -Corrected $State.Corrected `
@@ -1931,6 +1943,7 @@ function Get-XisfSubframeSelectorState{
             return New-XisfPreprocessingState `
                 -Stats $XisfFileStats `
                 -Calibrated $State.Calibrated `
+                -MasterBias $State.MasterBias `
                 -MasterDark $State.MasterDark `
                 -MasterFlat $State.MasterFlat `
                 -Corrected $State.Corrected `
@@ -1944,6 +1957,7 @@ function Get-XisfSubframeSelectorState{
             return New-XisfPreprocessingState `
                 -Stats $XisfFileStats `
                 -Calibrated $State.Calibrated `
+                -MasterBias $State.MasterBias `
                 -MasterDark $State.MasterDark `
                 -MasterFlat $State.MasterFlat `
                 -Corrected $State.Corrected `
@@ -1989,6 +2003,7 @@ function Get-XisfAlignedState{
             return New-XisfPreprocessingState `
                 -Stats $XisfFileStats `
                 -Calibrated $State.Calibrated `
+                -MasterBias $State.MasterBias `
                 -MasterDark $State.MasterDark `
                 -MasterFlat $State.MasterFlat `
                 -Corrected $State.Corrected `
@@ -2003,6 +2018,7 @@ function Get-XisfAlignedState{
             return New-XisfPreprocessingState `
                 -Stats $XisfFileStats `
                 -Calibrated $State.Calibrated `
+                -MasterBias $State.MasterBias `
                 -MasterDark $State.MasterDark `
                 -MasterFlat $State.MasterFlat `
                 -Corrected $State.Corrected `
