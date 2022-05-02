@@ -1771,7 +1771,7 @@ function  Get-XisfCalibrationState {
         }
 
         if(($AdditionalSearchPaths)){
-            Write-Verbose "Unable to locate calibration frame... checking additional search paths for $calibratedFileName"
+            Write-Debug "Unable to locate calibration frame... checking additional search paths for $calibratedFileName"
             $calibrated = $AdditionalSearchPaths | 
                 Where-Object { test-path $_.FullName } |
                 ForEach-Object { 
@@ -2094,7 +2094,7 @@ Function Invoke-XisfPostCalibrationColorImageWorkflow
         Get-XisfCalibrationState `
             -CalibratedPath $CalibrationPath `
             -AdditionalSearchPaths $BackupCalibrationPaths `
-            -Verbose |
+            -Verbose -Recurse |
         foreach-object {
             $x = $_
             if(-not $x.IsCalibrated()){
