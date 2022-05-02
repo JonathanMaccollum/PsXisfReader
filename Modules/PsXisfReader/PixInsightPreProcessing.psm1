@@ -1737,9 +1737,18 @@ function  Get-XisfCalibrationState {
         [Parameter(Mandatory,ValueFromPipeline=$true)][XisfFileStats]$XisfFileStats,
         [Parameter(Mandatory)][System.IO.DirectoryInfo]$CalibratedPath,
         [Parameter()][System.IO.DirectoryInfo[]]$AdditionalSearchPaths,
-        [Parameter()][Switch]$Recurse
+        [Parameter()][Switch]$Recurse,
+        [Parameter()][Switch]$ShowProgress,
+        [Parameter()][int]$ProgressTotalCount
     )
+    begin{
+        $i=0.0
+    }
     process{
+        $i+=1.0
+        if($ShowProgress -and ($i % 5 -eq 0)){
+            Write-Progress -Activity "Get-CalibrationState" -PercentComplete (100.0*$i/$ProgressTotalCount) -Status "Searching for matching calibration files $i of $ProgressTotalCount"
+        }
         $Path=$XisfFileStats.Path
         $Target=$XisfFileStats.Object
         $calibratedFileName = $Path.Name.Substring(0,$Path.Name.Length-$Path.Extension.Length)+"_c.xisf"
@@ -1791,6 +1800,11 @@ function  Get-XisfCalibrationState {
         
         return New-XisfPreprocessingState `
             -Stats $XisfFileStats
+    }
+    end{
+        if($ShowProgress){
+            Write-Progress -Activity "Get-CalibrationState" -PercentComplete 100.0 -Status "Done" -Completed
+        }
     }
 }
 
@@ -2094,7 +2108,7 @@ Function Invoke-XisfPostCalibrationColorImageWorkflow
         Get-XisfCalibrationState `
             -CalibratedPath $CalibrationPath `
             -AdditionalSearchPaths $BackupCalibrationPaths `
-            -Verbose -Recurse |
+            -Verbose -Recurse -ShowProgress -ProgressTotalCount ($ToProcess.Count) |
         foreach-object {
             $x = $_
             if(-not $x.IsCalibrated()){
@@ -2432,7 +2446,7 @@ Function Invoke-XisfPostCalibrationMonochromeImageWorkflow
         Get-XisfCalibrationState `
             -CalibratedPath $CalibrationPath `
             -AdditionalSearchPaths $BackupCalibrationPaths `
-            -Verbose -Recurse |
+            -Verbose -Recurse -ShowProgress -ProgressTotalCount ($ToProcess.Count) |
         foreach-object {
             $x = $_
             if(-not $x.IsCalibrated()){
