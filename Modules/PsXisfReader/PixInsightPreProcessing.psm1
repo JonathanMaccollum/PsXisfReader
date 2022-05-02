@@ -480,7 +480,8 @@ Function Invoke-PiLightCalibration
         [Parameter(Mandatory=$false)][System.IO.FileInfo]$MasterFlat,
         [Parameter(Mandatory=$true)][System.IO.DirectoryInfo]$OutputPath,
         [Parameter(Mandatory=$false)][Switch]$KeepOpen,
-        [Parameter()][int]$OutputPedestal=0
+        [Parameter()][int]$OutputPedestal=0,
+        [Parameter()][Switch]$EnableCFA
     )
 
     if($MasterBias -and (-not (Test-Path $MasterBias))){
@@ -522,6 +523,12 @@ Function Invoke-PiLightCalibration
         $masterFlatPath=""
         $masterFlatEnabled = "false"
     }
+    if($EnableCFA){
+        $EnableCFAFlag="true"
+    }
+    else{
+        $EnableCFAFlag="false"
+    }
 
     if(-not ($OutputPath.Exists)){
         $OutputPath.Create()
@@ -561,7 +568,7 @@ P.outputPedestal = $OutputPedestal;
 P.overwriteExistingFiles = false;
 P.onError = ImageCalibration.prototype.Abort;
 P.noGUIMessages = true;
-P.enableCFA = false;
+P.enableCFA = $EnableCFAFlag;
     P.targetFrames= [`r`n     $ImageDefinition`r`n   ];
     P.launch();
     P.executeGlobal();"
@@ -1018,7 +1025,8 @@ Function Invoke-FlatFrameSorting
         [System.IO.DirectoryInfo]$ArchiveDirectory,
         [System.IO.DirectoryInfo]$CalibratedFlatsOutput,
         [int]$PixInsightSlot,
-        [Switch]$KeepOpen
+        [Switch]$KeepOpen,
+        [Switch]$IncludeNoCalibrate
     )
     Get-ChildItem $DropoffLocation "*.xisf" |
     foreach-object { Get-XisfFitsStats -Path $_ } |
@@ -1062,15 +1070,18 @@ Function Invoke-FlatFrameSorting
             }
         }
 
-        $masterNoCalFlat = "$targetDirectory\$FlatDate.MasterFlatNoCal.$($filter).xisf"
-        $toIntegrate = $flats|foreach-object {$_.Path}
-        if(-not (Test-Path $masterNoCalFlat)) {
-            Invoke-PiFlatIntegration `
-                -Images $toIntegrate `
-                -PixInsightSlot $PixInsightSlot `
-                -OutputFile $masterNoCalFlat `
-                -KeepOpen:$KeepOpen
+        if($IncludeNoCalibrate){
+            $masterNoCalFlat = "$targetDirectory\$FlatDate.MasterFlatNoCal.$($filter).xisf"
+            $toIntegrate = $flats|foreach-object {$_.Path}
+            if(-not (Test-Path $masterNoCalFlat)) {
+                Invoke-PiFlatIntegration `
+                    -Images $toIntegrate `
+                    -PixInsightSlot $PixInsightSlot `
+                    -OutputFile $masterNoCalFlat `
+                    -KeepOpen:$KeepOpen
+            }
         }
+
         $destinationDirectory=join-path $targetDirectory $flatDate
         [System.IO.Directory]::CreateDirectory($destinationDirectory)>>$null
         $flats | Foreach-Object {Move-Item -Path $_.Path -Destination $destinationDirectory}
@@ -1125,7 +1136,9 @@ Function Invoke-LightFrameSorting
         [Parameter(Mandatory=$false)][int]$OutputPedestal = 0,
         [Parameter(Mandatory=$false)][Switch]$KeepOpen,
         [Parameter(Mandatory=$false)][ScriptBlock]$AfterImageCalibrated,
-        [Parameter(Mandatory=$false)][ScriptBlock]$AfterImagesCalibrated
+        [Parameter(Mandatory=$false)][ScriptBlock]$AfterImagesCalibrated,
+
+        [Parameter(Mandatory=$false)][Switch]$EnableCFA
     )
     if($null -eq $XisfStats)
     {
@@ -1173,6 +1186,7 @@ Function Invoke-LightFrameSorting
                 -OutputPath $OutputDirPerObject `
                 -OutputPedestal $OutputPedestal `
                 -PixInsightSlot $PixInsightSlot `
+                -EnableCFA:$EnableCFA.IsPresent `
                 -KeepOpen:$KeepOpen
         }
 
