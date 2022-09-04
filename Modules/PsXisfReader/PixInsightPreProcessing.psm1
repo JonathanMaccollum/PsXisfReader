@@ -1026,7 +1026,8 @@ Function Invoke-FlatFrameSorting
         [System.IO.DirectoryInfo]$CalibratedFlatsOutput,
         [int]$PixInsightSlot,
         [Switch]$KeepOpen,
-        [Switch]$IncludeNoCalibrate
+        [Switch]$IncludeNoCalibrate,
+        [Switch]$WhenNoMatchingDarkFlatPresentUseMostRecentDarkFlat
     )
     Get-ChildItem $DropoffLocation "*.xisf" |
     foreach-object { Get-XisfFitsStats -Path $_ } |
@@ -1042,31 +1043,36 @@ Function Invoke-FlatFrameSorting
 
         $targetDirectory = "$ArchiveDirectory\$focalLength\Flats"
         $masterDark = "$targetDirectory\$flatDate.MasterDarkFlat.$filter.xisf"
-        if(Test-Path $masterDark) {
-            $masterCalibratedFlat = "$targetDirectory\$flatDate.MasterFlatCal.$filter.xisf"
-            if(-not (Test-Path $masterCalibratedFlat)) {
-                $flats | foreach-object{
-                    $x = $_.Path
-                    $output = Join-Path ($CalibratedFlatsOutput.FullName) ($x.Name.Replace($x.Extension,"")+"_c.xisf")
-                    Add-Member -InputObject $_ -Name "CalibratedFlat" -MemberType NoteProperty -Value $output -Force
-                }
-                $toCalibrate = $flats | where-object {-not (Test-Path $_.CalibratedFlat)} | foreach-object {$_.Path}
-                if($toCalibrate){
-                    Invoke-PiFlatCalibration `
-                        -Images $toCalibrate `
-                        -MasterDark $masterDark `
-                        -OutputPath $CalibratedFlatsOutput `
-                        -PixInsightSlot $PixInsightSlot `
-                        -KeepOpen:$KeepOpen
-                }
-                $calibratedFlats = $flats|foreach-object {Get-Item $_.CalibratedFlat}
-                if($flats) {
-                    Invoke-PiFlatIntegration `
-                        -Images $calibratedFlats `
-                        -PixInsightSlot $PixInsightSlot `
-                        -OutputFile $masterCalibratedFlat `
-                        -KeepOpen:$KeepOpen
-                }
+        if((-not (Test-Path $masterDark)) -and $WhenNoMatchingDarkFlatPresentUseMostRecentDarkFlat){
+            $masterDark = get-childitem $targetDirectory -Filter "*.MasterDarkFlat.$filter.xisf" -file |
+                sort-object LastWriteTime -Descending |
+                select-object -First 1
+            Write-Warning "No matching dark flat exists: calibrating flat frame with the most recent master dark flat $($masterDark.Name)"
+        }
+        $masterCalibratedFlat = "$targetDirectory\$flatDate.MasterFlatCal.$filter.xisf"
+        
+        if(-not (Test-Path $masterCalibratedFlat)) {
+            $flats | foreach-object{
+                $x = $_.Path
+                $output = Join-Path ($CalibratedFlatsOutput.FullName) ($x.Name.Replace($x.Extension,"")+"_c.xisf")
+                Add-Member -InputObject $_ -Name "CalibratedFlat" -MemberType NoteProperty -Value $output -Force
+            }
+            $toCalibrate = $flats | where-object {-not (Test-Path $_.CalibratedFlat)} | foreach-object {$_.Path}
+            if($toCalibrate -and $masterDark -and (Test-Path $masterDark)){
+                Invoke-PiFlatCalibration `
+                    -Images $toCalibrate `
+                    -MasterDark $masterDark `
+                    -OutputPath $CalibratedFlatsOutput `
+                    -PixInsightSlot $PixInsightSlot `
+                    -KeepOpen:$KeepOpen
+            }
+            $calibratedFlats = $flats|foreach-object {Get-Item $_.CalibratedFlat}
+            if($flats) {
+                Invoke-PiFlatIntegration `
+                    -Images $calibratedFlats `
+                    -PixInsightSlot $PixInsightSlot `
+                    -OutputFile $masterCalibratedFlat `
+                    -KeepOpen:$KeepOpen
             }
         }
 
@@ -1502,7 +1508,7 @@ Function Invoke-PiLightIntegration
         "[true, ""$x"", ""$y"", """"]"
     }))
     if([string]::IsNullOrWhiteSpace($WeightKeyword)){
-        $WeightMode="NoiseEvaluation"
+        $WeightMode="PSFSignalWeight"
     }
     if([string]::IsNullOrWhiteSpace($Combination)){
         $Combination="Average"
@@ -2393,6 +2399,7 @@ Function Invoke-XisfPostCalibrationMonochromeImageWorkflow
         [int]$PixInsightSlot,
         [string]$ApprovalExpression,
         [string]$WeightingExpression,
+        [Switch]$PSFSignalWeightWeighting,
         [switch]$GenerateDrizzleData,
         [switch]$GenerateThumbnail,
 
@@ -2414,7 +2421,12 @@ Function Invoke-XisfPostCalibrationMonochromeImageWorkflow
         $OutputFileSuffixWithExtension+=".nodebayer"
     }
     if($SkipWeighting){
-        $OutputFileSuffixWithExtension+=".noweights"
+        if($PSFSignalWeightWeighting){
+            $OutputFileSuffixWithExtension+=".PSFSW"
+        }
+        else{
+            $OutputFileSuffixWithExtension+=".noweights"
+        }        
     }
     if($Rejection -eq "LinearFit"){
         $OutputFileSuffixWithExtension+=".LF.xisf"
@@ -2642,19 +2654,38 @@ Function Invoke-XisfPostCalibrationMonochromeImageWorkflow
                             $weightKeyword=$null
                         }
                         try {
-                        Invoke-PiLightIntegration `
-                            -Images ($toStack|foreach-object {$_.Path}) `
-                            -OutputFile $outputFile `
-                            -KeepOpen `
-                            -Rejection:$Rejection `
-                            -Normalization:$Normalization `
-                            -RejectionNormalization:$RejectionNormalization `
-                            -LinearFitLow:$LinearFitLow `
-                            -LinearFitHigh:$LinearFitHigh `
-                            -PixInsightSlot $PixInsightSlot `
-                            -GenerateDrizzleData:$GenerateDrizzleData `
-                            -WeightKeyword:$weightKeyword `
-                            -GenerateThumbnail:$GenerateThumbnail
+                            if($PSFSignalWeightWeighting){
+                                Invoke-PiLightIntegration `
+                                    -Images ($toStack|foreach-object {$_.Path}) `
+                                    -OutputFile $outputFile `
+                                    -KeepOpen `
+                                    -Rejection:$Rejection `
+                                    -Normalization:$Normalization `
+                                    -RejectionNormalization:$RejectionNormalization `
+                                    -LinearFitLow:$LinearFitLow `
+                                    -LinearFitHigh:$LinearFitHigh `
+                                    -PixInsightSlot $PixInsightSlot `
+                                    -GenerateDrizzleData:$GenerateDrizzleData `
+                                    -WeightKeyword:$weightKeyword `
+                                    -WeightMode:"PSFSignalWeight" `
+                                    -GenerateThumbnail:$GenerateThumbnail
+                            }
+                            else{
+                                Invoke-PiLightIntegration `
+                                    -Images ($toStack|foreach-object {$_.Path}) `
+                                    -OutputFile $outputFile `
+                                    -KeepOpen `
+                                    -Rejection:$Rejection `
+                                    -Normalization:$Normalization `
+                                    -RejectionNormalization:$RejectionNormalization `
+                                    -LinearFitLow:$LinearFitLow `
+                                    -LinearFitHigh:$LinearFitHigh `
+                                    -PixInsightSlot $PixInsightSlot `
+                                    -GenerateDrizzleData:$GenerateDrizzleData `
+                                    -WeightKeyword:$weightKeyword `
+                                    -GenerateThumbnail:$GenerateThumbnail
+                            }
+
                         }
                         catch {
                             write-warning $_.ToString()
@@ -2670,7 +2701,48 @@ Function Invoke-XisfPostCalibrationMonochromeImageWorkflow
             }
         }
 }
+Function Get-MasterBiasLibrary {
+    param (
+        [Parameter(Mandatory)][System.IO.DirectoryInfo]$Path,
+        [Parameter(Mandatory)][string]$Pattern
+    )
+    begin{
+        $regex=[System.Text.RegularExpressions.Regex]::new($Pattern)
+    }
+    process{
+        Get-ChildItem ($Path.FullName) -File |
+        ForEach-Object {
+            $y = $regex.Matches($_.Name)
+            if($y.Success){
+                $gain = $y.Groups | where-object Name -eq "gain" | foreach-object {$_.Value}
+                $offset = $y.Groups | where-object Name -eq "offset" | foreach-object {$_.Value}
+                $numberOfExposures = $y.Groups | where-object Name -eq "numberOfExposures" | foreach-object {$_.Value}
+                $exposure = $y.Groups | where-object Name -eq "exposure" | foreach-object {$_.Value}
 
+                if(-not $gain){
+                    write-warning "Unable to parse value for gain file... $($_.Name)"
+                }
+                elseif(-not $offset){
+                    write-warning "Unable to parse value for offset file... $($_.Name)"
+                }
+                elseif(-not $exposure){
+                    write-warning "Unable to parse value for exposure file... $($_.Name)"
+                }
+                else{
+                    $x = $_ | Get-XisfFitsStats
+                    $x.Gain=[Decimal]$gain
+                    $x.Offset=[Decimal]$offset
+                    $x.Exposure=[decimal]$exposure
+                    $x | Add-Member -NotePropertyName "NumberOfExposures" -NotePropertyValue ([int]$numberOfExposures)
+                    $x
+                }
+            }
+            else{
+                Write-Warning "Skipping file: does not match specified pattern... $($_.Name)"
+            }
+        }
+    }
+}
 Function Get-MasterDarkLibrary {
     param (
         [Parameter(Mandatory)][System.IO.DirectoryInfo]$Path,
