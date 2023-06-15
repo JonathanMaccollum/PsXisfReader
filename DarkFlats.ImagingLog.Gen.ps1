@@ -237,6 +237,55 @@ Function Format-MDExposureTableDatesAndObjectOverFilter
 
     Write-Output $result
 }
+
+Function Out-TargetImageDetailPage
+{
+    param(
+        $fileName,
+        $outputDir,
+        $date,
+        $object,
+        $integrationTime,
+        $telescope,
+        $instrument,
+        $nightsImaged,
+        $started,
+        $latest,
+        $thumbnails,
+        $subsForTarget
+    )
+
+    [System.IO.Directory]::CreateDirectory($outputDir)>>$null
+    $file = join-path $outputDir $fileName
+    $content = "---
+title: $object
+date: $($date.ToString('yyyy-MM-dd HH:mm:ss'))
+---
+**$Object**
+
+* Total time: $($integrationTime.Total | Format-ExposureTime)
+* Scope: $telescope
+* Camera: $instrument
+* Nights Imaged: $nightsImaged
+* Started: $($started.ToString('yyyy-MM-dd')) 
+* Latest: $($latest.ToString('yyyy-MM-dd'))
+
+"
+    $thumbnails | foreach-object {
+        if($_.Details){
+            $content += "* $($_.Details)
+
+"
+        }
+        $content += "![$($_.Name)]($($_.Url) `"$($_.Name)`")
+"
+    }
+
+    $content += "
+$(Format-MDExposureTableDatesOverFilter -Data $subsForTarget -IncludeTotals)"
+
+    $content | out-file $file -Force
+}
 @(
     #40
     #50
@@ -299,22 +348,20 @@ Function Format-MDExposureTableDatesAndObjectOverFilter
                 }
             } |
             foreach-object {
-                $group = $_.Group
+                $subsForTarget = $_.Group
 
-                $targetObjectRootPath = Join-Path $topLevelFolder ([IO.Path]::GetRelativePath($topLevelFolder, $group[0].Path).Split("\")[0])
+                $targetObjectRootPath = Join-Path $topLevelFolder ([IO.Path]::GetRelativePath($topLevelFolder, $subsForTarget[0].Path).Split("\")[0])
                 $targetThumbnailsPath = Join-Path $targetObjectRootPath "Thumbnails"
 
                 $object = (get-item $targetObjectRootPath).Name
                 $integrationTime = $_.IntegrationTime
                 $stats=$_.Stats
-
-                $fileName = "$($object).md"
                 $outputDir = "S:\JonsAstro\projects.darkflats.com\source\ImagingLog\$($focalLength)mm"
                 [System.IO.Directory]::CreateDirectory($outputDir)>>$null
                 $thumbnailOutputDir = Join-Path $outputDir Thumbnails
                 [System.IO.Directory]::CreateDirectory($thumbnailOutputDir)>>$null
                 
-                $headers = ($group[0].Path | Get-XisfHeader).xisf.Image.FITSKeyword
+                $headers = ($subsForTarget[0].Path | Get-XisfHeader).xisf.Image.FITSKeyword
                 $telescope = $null
                 try{$telescope = $headers |
                         where-object Name -eq "TELESCOP" |
@@ -324,26 +371,12 @@ Function Format-MDExposureTableDatesAndObjectOverFilter
                     $telescope = ""
                 }
 
-                $nights = $group | group-object ObsDateMinus12hr
+                $nights = $subsForTarget | group-object ObsDateMinus12hr
                 
-                $file = join-path $outputDir $fileName
-                $content = "---
-title: $object
-date: $($stats.Maximum.ToString('yyyy-MM-dd HH:mm:ss'))
----
-**$Object**
 
-* Total time: $($integrationTime.Total | Format-ExposureTime)
-* Scope: $telescope
-* Camera: $($group[0].Instrument)
-* Nights Imaged: $($nights.Count)
-* Started: $($stats.Minimum.ToString('yyyy-MM-dd')) 
-* Latest: $($stats.Maximum.ToString('yyyy-MM-dd'))
-
-"
-
-                # Add Thumbnails to the page
-                Get-ChildItem $targetObjectRootPath -File -Recurse |
+                # Fetch and Generated Thumbnails
+                $thumbnails = @()
+                $thumbnails += Get-ChildItem $targetObjectRootPath -File -Recurse |
                     where-object { $_.FullName.Contains("Processing") } |
                     where-object { -not $_.FullName.Contains(".Web.") } |
                     where-object { -not $_.FullName.Contains("CatalogStars.") } |
@@ -364,10 +397,14 @@ date: $($stats.Maximum.ToString('yyyy-MM-dd HH:mm:ss'))
                                 write-host "Creating thumbnail for $($x.Name)"
                                 Resize-Image -InputFile $x -OutputFile $thumbnailOutputPath -ProportionalResize $true -Width 1280 -Height 1280
                             }
-                            
-                            $webPath=[System.Web.HttpUtility]::UrlPathEncode((Join-Path $object $x.Name))
-                            $content += "![$($x.Name.Replace("."," "))](/ImagingLog/$($focalLength)mm/Thumbnails/$webPath `"$($x.Name.Replace("."," "))`")
-                            "
+
+                            $webPath = [System.Web.HttpUtility]::UrlPathEncode((Join-Path $object $x.Name))
+                            new-object psobject -Property @{
+                                Name = $x.Name.Replace("."," ")
+                                Details = $null
+                                Url = "/ImagingLog/$($focalLength)mm/Thumbnails/$webPath"
+                                LastWriteTime = $x.LastWriteTime
+                            }
                         }
                         catch{
                             write-warning "Failed to produce thumbnail for $($x.Name)"
@@ -375,62 +412,73 @@ date: $($stats.Maximum.ToString('yyyy-MM-dd HH:mm:ss'))
                     }
 
                 # Add Filter-Specific Thumbnails to the page
-                $group | Group-Object Filter | sort-object {
-                    if($_.Name.StartsWith("L")){
-                        1
+                $thumbnails += $subsForTarget | 
+                    Group-Object Filter | 
+                    sort-object {
+                        if($_.Name.StartsWith("L")){
+                            1
+                        }
+                        elseif($_.Name.StartsWith("R")){
+                            2
+                        }
+                        elseif($_.Name.StartsWith("G")){
+                            3
+                        }
+                        elseif($_.Name.StartsWith("B")){
+                            4
+                        }
+                        elseif($_.Name.StartsWith("H")){
+                            5
+                        }
+                        elseif($_.Name.StartsWith("O")){
+                            6
+                        }
+                        elseif($_.Name.StartsWith("S")){
+                            7
+                        }
+                        else{
+                            8
+                        }
+                    } | ForEach-Object {
+                        $filter=$_.name
+                        $byFilter = $_.Group
+                        
+                        if(-not (test-path $targetThumbnailsPath)){
+                            return
+                        }
+                        $mostRecentThumbnail = Get-ChildItem $targetThumbnailsPath "$object.$filter.*.jpeg" |
+                            Sort-Object LastWriteTime -Descending |
+                            Select-Object -First 1
+                        if(-not $mostRecentThumbnail){
+                            return
+                        }
+                        $thumbnailOutputPath = Join-Path $thumbnailOutputDir $mostRecentThumbnail.Name
+                        if(-not (Test-Path $thumbnailOutputPath)){
+                            write-host "Creating thumbnail for $($mostRecentThumbnail.Name)"
+                            Resize-Image -InputFile $mostRecentThumbnail -OutputFile $thumbnailOutputPath -ProportionalResize $true -Width 1280 -Height 1280
+                        }
+                        $webPath=[System.Web.HttpUtility]::UrlPathEncode($mostRecentThumbnail.Name)
+                        $integrationTimeByFilter = $byFilter | Measure-ExposureTime
+                        new-object psobject -Property @{
+                            Name = "$object - $filter"
+                            Url = "/ImagingLog/$($focalLength)mm/Thumbnails/$webPath"
+                            Details = "$filter : $($integrationTimeByFilter.Total | Format-ExposureTime)"
+                        }
                     }
-                    elseif($_.Name.StartsWith("R")){
-                        2
-                    }
-                    elseif($_.Name.StartsWith("G")){
-                        3
-                    }
-                    elseif($_.Name.StartsWith("B")){
-                        4
-                    }
-                    elseif($_.Name.StartsWith("H")){
-                        5
-                    }
-                    elseif($_.Name.StartsWith("O")){
-                        6
-                    }
-                    elseif($_.Name.StartsWith("S")){
-                        7
-                    }
-                    else{
-                        8
-                    }
-                } | ForEach-Object {
-                    $filter=$_.name
-                    $byFilter = $_.Group
-                    
-                    if(-not (test-path $targetThumbnailsPath)){
-                        return
-                    }
-                    $mostRecentThumbnail = Get-ChildItem $targetThumbnailsPath "$object.$filter.*.jpeg" |
-                        Sort-Object LastWriteTime -Descending |
-                        Select-Object -First 1
-                    if(-not $mostRecentThumbnail){
-                        return
-                    }
-                    $thumbnailOutputPath = Join-Path $thumbnailOutputDir $mostRecentThumbnail.Name
-                    if(-not (Test-Path $thumbnailOutputPath)){
-                        write-host "Creating thumbnail for $($mostRecentThumbnail.Name)"
-                        Resize-Image -InputFile $mostRecentThumbnail -OutputFile $thumbnailOutputPath -ProportionalResize $true -Width 1280 -Height 1280
-                    }
-                    $webPath=[System.Web.HttpUtility]::UrlPathEncode($mostRecentThumbnail.Name)
-                    $integrationTimeByFilter = $byFilter | Measure-ExposureTime
-                    $content += "* $filter : $($integrationTimeByFilter.Total | Format-ExposureTime)
 
-"
-                    $content += "![$object - $filter](/ImagingLog/$($focalLength)mm/Thumbnails/$webPath `"$object - $filter`")
-"
-                }
-
-                $content += "
-$(Format-MDExposureTableDatesOverFilter -Data $group -IncludeTotals)"
-
-                $content | out-file $file -Force
+                    Out-TargetImageDetailPage `
+                        -fileName "$($object).md" `
+                        -outputDir "S:\JonsAstro\projects.darkflats.com\source\ImagingLog\$($focalLength)mm" `
+                        -date $stats.Maximum `
+                        -object $object `
+                        -integrationTime $integrationTime `
+                        -telescope $telescope `
+                        -instrument $subsForTarget[0].Instrument `
+                        -nightsImaged $nights.Count `
+                        -started $stats.Minimum `
+                        -latest $stats.Maximum `
+                        -thumbnails $thumbnails `
+                        -subsForTarget $subsForTarget
             }
 
         $fullTable = Format-MDExposureTableDatesAndObjectOverFilter `
