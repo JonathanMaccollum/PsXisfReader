@@ -2,9 +2,9 @@ if (-not (get-module psxisfreader)){import-module psxisfreader}
 
 $ErrorActionPreference="STOP"
 $WarningPreference="Continue"
-$DropoffLocation = "D:\Backups\Camera\Dropoff\NINA"
+$DropoffLocation = "D:\Backups\Camera\Dropoff\NINACS"
 $ArchiveDirectory="E:\Astrophotography"
-$CalibratedOutput = "F:\PixInsightLT\Calibrated"
+$CalibratedOutput = "E:\Calibrated\40mm"
 <#
 Invoke-BiasFrameSorting `
     -DropoffLocation $DropoffLocation `
@@ -23,11 +23,16 @@ Invoke-DarkFlatFrameSorting `
 Invoke-FlatFrameSorting `
     -DropoffLocation $DropoffLocation `
     -ArchiveDirectory $ArchiveDirectory `
-    -CalibratedFlatsOutput "F:\PixInsightLT\CalibratedFlats" `
+    -CalibratedFlatsOutput "E:\Calibrated\CalibratedFlats" `
     -PixInsightSlot 201
 exit
 #>
 #exit
+$AllowCalibrationWithoutFlats=$false
+$PushToLightBucket=$true
+$BiasLibraryFiles=Get-MasterBiasLibrary `
+    -Path "E:\Astrophotography\BiasLibrary\QHY268M" `
+    -Pattern "^(?<date>\d+).MasterBias.Gain.(?<gain>\d+).Offset.(?<offset>\d+).(?<numberOfExposures>\d+)x(?<exposure>\d+\.?\d*)s.xisf$"
 
 $DarkLibraryFiles=Get-MasterDarkLibrary `
     -Path "E:\Astrophotography\DarkLibrary\QHY268M" `
@@ -127,7 +132,7 @@ Get-ChildItem $DropoffLocation *.xisf |
     where-object FocalLength -eq "40" |
     #where-object Offset -eq 65 |
     #where-object Object -eq "Orion on Mu Ori" |
-    group-object Instrument,SetTemp,Gain,Offset,Exposure |
+    group-object Instrument,SetTemp,Gain,Offset,Exposure,FocalRatio |
     foreach-object {
         $lights = $_.Group
         $x=$lights[0]
@@ -138,39 +143,89 @@ Get-ChildItem $DropoffLocation *.xisf |
         $exposure=[decimal]$x.Exposure
         $ccdTemp = [decimal]$x.CCDTemp
         $setTemp=[decimal]$x.SetTemp
+        $focalRatio=[decimal]$x.FocalRatio
+
+        $masterBias = $BiasLibraryFiles |
+            where-object Gain -eq $gain |
+            where-object Offset -eq $offset |
+            where-object Instrument -eq $instrument |
+            sort-object ObsDate -Descending |
+            select-object -First 1
+        if($masterBias){
+            write-host "Master bias available for $instrument at Gain=$gain Offset=$offset. $($masterBias.Path.Name)"
+        }
+        else{
+            Write-Warning "No master bias available for $instrument at Gain=$gain Offset=$offset."
+        }
         $masterDark = $DarkLibrary | where-object {
             $dark = $_
             ($dark.Instrument-eq $instrument) -and
             ($dark.Gain-eq $gain) -and
             ($dark.Offset-eq $offset) -and
             ($dark.Exposure-eq $exposure) -and
-            ([Math]::abs($dark.SetTemp - $ccdTemp) -lt 1)
+            ([Math]::abs($dark.SetTemp - $ccdTemp) -lt 3)
         } | select-object -first 1
 
         if(-not $masterDark){
-            Write-Warning "Unable to process $($lights.Count) images: No master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp"
-        }else {
-            Write-Host "Master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp"
+            if($masterBias){
+                $masterDark = $DarkLibrary | where-object {
+                    $dark = $_
+                    ($dark.Instrument-eq $instrument) -and
+                    ($dark.Gain-eq $gain) -and
+                    ($dark.Offset-eq $offset) -and
+                    ($dark.Exposure-eq $exposure)
+                } | select-object -first 1
+                if($masterDark){
+                    Write-Warning "No master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp. Attempting to scale temperature."
+                }
+                else{
+                    Write-Warning "No master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp. Using bias only."
+                }
+            }
+            else{
+                Write-Warning "No master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp. Using bias only."
+            }
+        }
             $lights |
                 group-object Filter,FocalLength |
                 foreach-object {
                     $filter = $_.Group[0].Filter
                     $focalLength=$_.Group[0].FocalLength
-                    $masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20211017.MasterFlatNoCal.$filter.Clean.xisf"
+                    #$masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20211017.MasterFlatNoCal.$filter.Clean.xisf"
 
-                    if($masterFlat -and (-not (test-path $masterFlat))) {
-                        Write-Warning "Skipping $($_.Group.Count) frames at ($focalLength)mm with filter $filter. Reason: No master flat was found."
+                    if($focalRatio -eq 2.8){
+                        $masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20221230.MasterFlatCal.$filter.xisf"
                     }
                     else{
+                        $masterFlat=$null
+                    }
 
-                        Write-Host "Sorting $($_.Group.Count) frames at ($focalLength)mm with filter $filter"
-                        Write-Host " Dark: $($masterDark.Path)"
-                        Write-Host " Flat: $($masterFlat)"
+   
+                        if(-not $masterFlat `
+                            -and (-not $AllowCalibrationWithoutFlats)) {
+
+                            Write-Warning "Skipping $($_.Group.Count) frames at ($focalLength)mm with filter $filter. Reason: No master flat was found."
+                        }
+                        else{
+                            $masterBiasFile=$masterBias.Path
+                            $masterDarkFile=$masterDark.Path
+                            $optimizeDark = ($masterBiasFile -and $masterDarkFile)
+                            $calibrateDark= ($masterBiasFile -and $masterDarkFile)
+                            Write-Host "Sorting $($_.Group.Count) frames at ($focalLength)mm with filter $filter"
+                            if($masterBias){
+                                Write-Host " Bias: $($masterBias.Path)"
+                            }
+                            if($masterDark) {
+                                Write-Host " Dark: $($masterDark.Path)"
+                            }
+                            if($masterFlat){
+                                Write-Host " Flat: $($masterFlat)"
+                            }
                         
                         Invoke-LightFrameSorting `
-                            -XisfStats ($_.Group) -ArchiveDirectory $ArchiveDirectory `
-                            <#-MasterBias "E:\Astrophotography\BiasLibrary\QHY268M\20210712.SuperBias.Gain.56.Offset.10.60x0.001s.xisf" -OptimizeDark -CalibrateDark#> `
-                            -MasterDark ($masterDark.Path) `
+                        -XisfStats ($_.Group) -ArchiveDirectory $ArchiveDirectory `
+                        -MasterBias $masterBiasFile -OptimizeDark:$OptimizeDark -CalibrateDark:$calibrateDark `
+                        -MasterDark $masterDarkFile `
                             -MasterFlat $masterFlat `
                             -OutputPath $CalibratedOutput `
                             -PixInsightSlot 201 `
@@ -178,6 +233,10 @@ Get-ChildItem $DropoffLocation *.xisf |
                             -Verbose `
                             -AfterImagesCalibrated {
                                 param($LightFrames)
+
+                                if(-not $PushToLightBucket){
+                                    return;
+                                }
 
                                 $Last = $LightFrames | select-object -Last 1
                                 $LightFrames | foreach-object {
@@ -211,7 +270,6 @@ Get-ChildItem $DropoffLocation *.xisf |
                                 }
                             }
                             
-                    }
                 }
         }
     }

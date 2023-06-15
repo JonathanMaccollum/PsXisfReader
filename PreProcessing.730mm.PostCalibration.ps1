@@ -7,7 +7,7 @@ $VerbosePreference="Continue"
 $target="E:\Astrophotography\730mm\IC410 - Tadpoles"
 
 #Get-XisfFitsStats -Path "E:\Astrophotography\1000mm\LDN 1657 in Seagull Panel 1\360.00s\LDN 1657 in Seagull Panel 1_Ha3nm_LIGHT_2021-03-21_21-22-16_0000_360.00s_-15.00_0.49.xisf" |
-#Get-XisfCalibrationState -CalibratedPath "F:\PixInsightLT\Calibrated" -Verbose -AdditionalSearchPaths @("T:\PixInsightLT\Calibrated","N:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated","H:\PixInsightLT\Calibrated") -Recurse
+#Get-XisfCalibrationState -CalibratedPath "F:\PixInsightLT\Calibrated" -Verbose -AdditionalSearchPaths @("M:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated") -Recurse
 
 $referenceImages = @(
     "IC410 - Tadpoles.Ha.77x180s.ESD.xisf"
@@ -46,7 +46,7 @@ $data=Invoke-XisfPostCalibrationMonochromeImageWorkflow `
     <#-DarkLibraryPath "E:\Astrophotography\DarkLibrary\QHY268M"#> `
     -DarkLibraryPath "E:\Astrophotography\DarkLibrary\QHYCCD-Cameras-Capture (ASCOM)" `
     -AlignedOutputPath "S:\PixInsight\Aligned" `
-    -BackupCalibrationPaths @("T:\PixInsightLT\Calibrated","N:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated","H:\PixInsightLT\Calibrated") `
+    -BackupCalibrationPaths @("M:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated") `
     -PixInsightSlot 200 `
     -RerunCosmeticCorrection:$false `
     -SkipCosmeticCorrection:$false `

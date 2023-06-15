@@ -11,16 +11,20 @@ $VerbosePreference="Continue"
 #$target="E:\Astrophotography\1000mm\LDN1622"
 #$target="E:\Astrophotography\1000mm\NGC 4535 and NGC 4560"
 #$target="E:\Astrophotography\1000mm\Muppet in Auriga"
-#$target="E:\Astrophotography\1000mm\Tulip Panel 1"
+#$target="E:\Astrophotography\1000mm\Tulip Panel 4"
 #$target="E:\Astrophotography\1000mm\Abell 39"
-$target="E:\Astrophotography\1000mm\M60 sn2022hrs in NGC4647"
-
-
+#$target="E:\Astrophotography\1000mm\M60 sn2022hrs in NGC4647"
+#$target="E:\Astrophotography\1000mm\Abell 35"
+#$target="E:\Astrophotography\1000mm\Abell 31"
+#$target="E:\Astrophotography\1000mm\Sadr Take 3"
+#$target="E:\Astrophotography\1000mm\Eye of Smaug Take 2"
+$target="E:\Astrophotography\1000mm\Eye of Smaug Take 2P2"
+#$target="E:\Astrophotography\1000mm\vdb131 vdb132 Take 2"
 
 $createSuperLum=$false
 
 #Get-XisfFitsStats -Path "E:\Astrophotography\1000mm\LDN 1657 in Seagull Panel 1\360.00s\LDN 1657 in Seagull Panel 1_Ha3nm_LIGHT_2021-03-21_21-22-16_0000_360.00s_-15.00_0.49.xisf" |
-#Get-XisfCalibrationState -CalibratedPath "F:\PixInsightLT\Calibrated" -Verbose -AdditionalSearchPaths @("T:\PixInsightLT\Calibrated","N:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated","H:\PixInsightLT\Calibrated") -Recurse
+#Get-XisfCalibrationState -CalibratedPath "F:\PixInsightLT\Calibrated" -Verbose -AdditionalSearchPaths @("M:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated") -Recurse
 
 $referenceImages = @(
     "Jellyfish Exhaust.Ha.31x180s.Ha.9x240s.Ha.15x360s.ESD.xisf"
@@ -94,6 +98,9 @@ $referenceImages = @(
 "_NGC 4535 and NGC 4560.L.76x90s.ESD.xisf"
 "Muppet in Auriga.Ha.51x180s.Ha.15x360s.ESD.xisf"
 "M60 sn2022hrs in NGC4647.LRGB.L.41x90s.R.35x90s.G.42x90s.B.44x90s.SynthLum.xisf"
+"Sadr Take 3.Ha6nmMaxFR.187x90s.ESD.xisf"
+"Eye of Smaug Take 2.R.10x45s.ESD.xisf"
+"vdb131 vdb132 Take 2.L.38x45s.PSFSW.ESD.xisf"
 )
 $alignmentReference = $null 
 $alignmentReference = 
@@ -116,25 +123,26 @@ $rawSubs =
     #Where-Object {-not $_.Filter.Contains("Oiii")} |
     Where-Object Filter -ne "V4" |
     Where-Object Instrument -ne "QHY294PROM" |
-    #Where-Object Filter -eq "Oiii" |
+    #Where-Object Filter -in @( "R","G","B" )|
     #Where-Object Filter -ne "L" |
-    Where-Object Exposure -ne 30 |
+    #Where-Object Exposure -ne 30 |
     #Where-object ObsDateMinus12hr -ge ([DateTime]"2022-03-20") |
+    #Where-object ObsDateMinus12hr -eq ([DateTime]"2022-05-04") |
     Where-Object {-not $_.IsIntegratedFile()} #|
     #select-object -First 30
 #$rawSubs|Format-Table Path,*
-$rawSubs = $rawSubs | Where-Object ObsDateMinus12hr -eq "2022-04-27"
+#$rawSubs = $rawSubs | Where-Object ObsDateMinus12hr -eq "2022-04-27"
 #$rawSubs|Group-Object ObsDateMinus12hr
 $data=Invoke-XisfPostCalibrationMonochromeImageWorkflow `
     -RawSubs $rawSubs `
     -CalibrationPath "F:\PixInsightLT\Calibrated" `
     -CorrectedOutputPath "S:\PixInsight\Corrected" `
     -WeightedOutputPath "S:\PixInsight\Weighted" `
-    <#-DarkLibraryPath "E:\Astrophotography\DarkLibrary\QHY268M"#> `
-    -DarkLibraryPath "E:\Astrophotography\DarkLibrary\QHYCCD-Cameras-Capture (ASCOM)" `
+    -DarkLibraryPath "E:\Astrophotography\DarkLibrary\QHY600M" `
+    <#-DarkLibraryPath "E:\Astrophotography\DarkLibrary\QHYCCD-Cameras-Capture (ASCOM)"#> `
     -AlignedOutputPath "S:\PixInsight\Aligned" `
-    -BackupCalibrationPaths @("T:\PixInsightLT\Calibrated","N:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated","H:\PixInsightLT\Calibrated") `
-    -PixInsightSlot 200 `
+    -BackupCalibrationPaths @("M:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated") `
+    -PixInsightSlot 200 -PSFSignalWeightWeighting `
     -RerunCosmeticCorrection:$false `
     -SkipCosmeticCorrection:$false `
     -RerunWeighting:$false `
@@ -150,8 +158,8 @@ $data=Invoke-XisfPostCalibrationMonochromeImageWorkflow `
     + 20*(1-(Median-MedianMin)/(MedianMax-MedianMin))
     + 30*(Stars-StarsMin)/(StarsMax-StarsMin))
     + 20" `
-    -Rejection "Rejection_ESD" `
-    -GenerateThumbnail `
+      `
+    -GenerateThumbnail -Rejection "Rejection_ESD" `
     -Verbose
 if($data){
 
@@ -224,7 +232,7 @@ if($data){
         $data|foreach-object{
             $_.RemoveAlignedAndDrizzleFiles()
             $_.RemoveWeightedFiles()
-            $_.RemoveCorrectedFiles()
+            #$_.RemoveCorrectedFiles()
         }
     }
 

@@ -2,25 +2,25 @@ Clear-Host
 if (-not (get-module psxisfreader)){import-module $psscriptroot\Modules\PsXisfReader\PsXisfReader.psd1}
 $ErrorActionPreference="STOP"
 $VerbosePreference="Continue"
-$target="E:\Astrophotography\135mm\Tulip Widefield"
+$target="E:\Astrophotography\135mm\NGC 2403 135mm"
 $alignmentReference=$null
 
 $rawSubs =
     Get-XisfLightFrames -Path $target -Recurse |
     Where-Object {-not $_.HasTokensInPath(@("reject","process","testing","clouds","draft","cloudy","_ez_LS_"))} |
     Where-Object {-not $_.IsIntegratedFile()} |
-    Where-Object Filter -eq "D1"
+    Where-Object Filter -eq "L3"
 $alignmentReference=join-path $target "_Sh2-126b.L3.117x60s.xisf"
     
 $data = Invoke-XisfPostCalibrationColorImageWorkflow `
     -RawSubs $rawSubs `
-    -CalibrationPath "F:\PixInsightLT\Calibrated" `
+    -CalibrationPath "M:\PixInsightLT\Calibrated" `
     -CorrectedOutputPath "S:\PixInsight\Corrected" `
     -WeightedOutputPath "S:\PixInsight\Weighted" `
     -DebayeredOutputPath "S:\PixInsight\Debayered" `
     -DarkLibraryPath "E:\Astrophotography\DarkLibrary\ZWO ASI071MC Pro" `
     -AlignedOutputPath "S:\PixInsight\Aligned" `
-    -BackupCalibrationPaths @("T:\PixInsightLT\Calibrated","N:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated") `
+    -BackupCalibrationPaths @("M:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated") `
     -PixInsightSlot 201 `
     -RerunWeighting:$false `
     -SkipWeighting:$false `

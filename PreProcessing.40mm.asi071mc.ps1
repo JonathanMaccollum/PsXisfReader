@@ -4,8 +4,8 @@ $ErrorActionPreference="STOP"
 
 $DropoffLocation = "D:\Backups\Camera\Dropoff\NINACS"
 $ArchiveDirectory="E:\Astrophotography"
-$CalibratedOutput = "F:\PixInsightLT\Calibrated"
-
+$CalibratedOutput = "E:\Calibrated\40mm"
+<#
 Invoke-DarkFrameSorting `
     -DropoffLocation $DropoffLocation `
     -ArchiveDirectory $ArchiveDirectory `
@@ -20,7 +20,7 @@ Invoke-FlatFrameSorting `
     -ArchiveDirectory $ArchiveDirectory `
     -CalibratedFlatsOutput "F:\PixInsightLT\CalibratedFlats" `
     -PixInsightSlot 201
-
+#>
 $DarkLibraryFiles=Get-MasterDarkLibrary `
     -Path "E:\Astrophotography\DarkLibrary\ZWO ASI071MC Pro" `
     -Pattern "^(?<date>\d+).MasterDark.Gain.(?<gain>\d+).Offset.(?<offset>\d+).(?<temp>-?\d+)C.(?<numberOfExposures>\d+)x(?<exposure>\d+)s.xisf$"
@@ -47,7 +47,7 @@ Get-ChildItem $DropoffLocation *.xisf |
     where-object Instrument -eq "ZWO ASI071MC Pro" |
     where-object ImageType -eq "LIGHT" |
     where-object FocalLength -eq "40" |
-    group-object Instrument,SetTemp,Gain,Offset,Exposure |
+    group-object Instrument,SetTemp,Gain,Offset,Exposure,FocalRatio |
     foreach-object {
         $lights = $_.Group
         $x=$lights[0]
@@ -65,7 +65,7 @@ Get-ChildItem $DropoffLocation *.xisf |
             ($dark.Offset-eq $offset) -and
             ($dark.Exposure-eq $exposure) -and
             #($dark.SetTemp -eq $setTemp)
-            ([Math]::abs($dark.SetTemp - $ccdTemp) -lt 3)
+            ([Math]::abs($dark.SetTemp - $ccdTemp) -lt 4)
         } | select-object -first 1
 
         
@@ -79,11 +79,21 @@ Get-ChildItem $DropoffLocation *.xisf |
         }else {
             Write-Host "Master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp"
             $lights |
-                group-object Filter,FocalLength |
+                group-object Filter,FocalLength,FocalRatio |
                 foreach-object {
                     $filter = $_.Group[0].Filter
                     $focalLength=$_.Group[0].FocalLength
-                    $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20210530.MasterFlatCal.F4.$filter.xisf"
+                    $focalRatio=$_.Group[0].FocalRatio
+                    
+                    if($focalRatio -eq 5.6){
+                        $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20220923.MasterFlatCal.$filter.xisf"
+                    }
+                    elseif($focalRatio -eq 4) {
+                        $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20210530.MasterFlatCal.F4.$filter.xisf"
+                    }
+                    elseif($focalRatio -eq 2.8) {
+                        $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20221227.MasterFlatCal.$filter.f2.8.Take2.Clean.xisf"
+                    }
 
                     if(-not (test-path $masterFlat)) {
                         Write-Warning "Skipping $($_.Group.Count) frames at ($focalLength)mm with filter $filter. Reason: No master flat was found."

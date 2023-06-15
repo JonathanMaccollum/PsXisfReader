@@ -25,13 +25,13 @@ Invoke-DarkFlatFrameSorting `
     ForEach-Object{
         $filter=$_
         get-item "E:\Astrophotography\1000mm\Flats\20220209.MasterDarkFlat.L.xisf" |
-            copy-item -Destination "E:\Astrophotography\1000mm\Flats\20220425.MasterDarkFlat.$($filter).xisf"
+            copy-item -Destination "E:\Astrophotography\1000mm\Flats\20220504.MasterDarkFlat.$($filter).xisf"
     }
 
 Invoke-FlatFrameSorting `
     -DropoffLocation $DropoffLocation `
     -ArchiveDirectory $ArchiveDirectory `
-    -CalibratedFlatsOutput "F:\PixInsightLT\CalibratedFlats" `
+    -CalibratedFlatsOutput "E:\Calibrated\CalibratedFlats" `
     -PixInsightSlot 200
 exit
 #>
@@ -123,7 +123,7 @@ Get-ChildItem $DropoffLocation *.xisf |
     where-object FocalLength -eq "1000" |
     #where-object ObsDateMinus12hr -eq "1/25/2022 12:00:00 AM" |
     #where-object Offset -eq 65 |
-    #where-object Object -eq "NGC 4535 and NGC 4560" |
+    #where-object Object -eq "The Coma Cluster" |
     #Select-Object -First 3 |
     group-object Instrument,SetTemp,Gain,Offset,Exposure |
     foreach-object {
@@ -156,7 +156,8 @@ Get-ChildItem $DropoffLocation *.xisf |
                     $focalLength=$_.Group[0].FocalLength
                     $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20220228.MasterFlatCal.$filter.xisf" # 0 degrees
                     #$masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20220425.MasterFlatCal.$filter.xisf" # 90 degrees
-                    $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20220424.MasterFlatCal.$filter.xisf" # 0 degrees
+                    #$masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20220424.MasterFlatCal.$filter.xisf" # 0 degrees
+                    $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20220504.MasterFlatCal.$filter.xisf" # 0 degrees
 
                     if(-not (test-path $masterFlat)) {
                         Write-Warning "Skipping $($_.Group.Count) frames at ($focalLength)mm with filter $filter. Reason: No master flat was found."

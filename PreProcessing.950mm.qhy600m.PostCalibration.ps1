@@ -4,9 +4,60 @@ if (-not (get-module psxisfreader)){import-module psxisfreader}
 $ErrorActionPreference="STOP"
 $VerbosePreference="Continue"
 $targets = @(
-     "E:\Astrophotography\90mm\Abell 35"
+     #"E:\Astrophotography\950mm\Sadr Take 2b"
+     #"E:\Astrophotography\950mm\Eye of Smaug Take 2"
+     #"E:\Astrophotography\950mm\Eye of Smaug Take 2P2"
+     #"E:\Astrophotography\950mm\NGC7129 NGC7142 Take 2b"
+     #"E:\Astrophotography\950mm\vdb131 vdb132 Take 2"
+     #"E:\Astrophotography\950mm\sh2-115 Take 2"
+     #"E:\Astrophotography\950mm\NGC1333 Take 2"
+     #"E:\Astrophotography\950mm\LDN 1251 Take 2"
+     #"E:\Astrophotography\950mm\LBN 437 - Gecko Nebula"
+     #"E:\Astrophotography\950mm\Abell 85"
+     #"E:\Astrophotography\950mm\IC5068 - Crack in Cygnus Panel 1"
+     #"E:\Astrophotography\950mm\IC5068 - Crack in Cygnus Panel 2"
+     #"E:\Astrophotography\950mm\Spider and Fly Take 3"
+     #"E:\Astrophotography\950mm\Properller and Smaug Panel 1"
+     #"E:\Astrophotography\950mm\Properller and Smaug Panel 2"
+     #"E:\Astrophotography\950mm\2022 SN Candidate in Cygnus"
+     #"E:\Astrophotography\950mm\Soul Take 3 Panel 1"
+     #"E:\Astrophotography\950mm\Soul Take 3 Panel 2"
+     #"E:\Astrophotography\950mm\C2022 E3 ZTF"
+     #"E:\Astrophotography\950mm\Abell 31 Take 2"
+     #"E:\Astrophotography\950mm\NGC2787 Take 2"
+     "E:\Astrophotography\950mm\Crescent Nebula"
+     #"E:\Astrophotography\950mm\M 101"
+     #"E:\Astrophotography\950mm\ARP 84 (NGC 5394 and NGC 5395)"
+     #"E:\Astrophotography\950mm\Bright Stars in Draco"
+     #"E:\Astrophotography\950mm\NGC 5935 NGC 5945 NGC 5943"
+     #"E:\Astrophotography\950mm\Melotte 111"
+     #"E:\Astrophotography\950mm\wr134 Take 3"
 )
 $referenceImages = @(
+    "Sadr Take 2b.Ha.64x180s.ESD.xisf"
+    "vdb131 vdb132 Take 2.Ha.49x180s.ESD.xisf"
+    "Eye of Smaug Take 2.Ha.29x180s.ESD.xisf"
+    "Eye of Smaug Take 2P2.Ha.10x180s.ESD.xisf"
+    "Properller and Smaug Panel 1.Oiii.21x360s.PSFSW.ESD.xisf"
+    "Properller and Smaug Panel 2.Oiii.18x360s.PSFSW.ESD.xisf"
+    "sh2-115 Take 2.Oiii.32x360s.ESD.xisf"
+    "LDN 1251 Take 2.Superlum.L.191x180s.R.127x180s.G.114x180s.B.121x180s.LF.45degFlats.xisf"
+    "NGC7129 NGC7142 Take 2b.Ha.63x360s.PSFSW.ESD.xisf"
+    "LBN 437 - Gecko Nebula.L.13x180s.PSFSW.ESD.xisf"
+    "IC5068 - Crack in Cygnus Panel 1.Ha.25x360s.ESD.xisf"
+    "IC5068 - Crack in Cygnus Panel 2.Ha.29x360s.ESD.xisf"
+    "NGC1333 Take 2.L.180x180s.ESD.xisf"
+    "Abell 85.Ha.113x360s.PSFSW.ESD.xisf"
+    "Spider and Fly Take 3.L.68x180s.PSFSW.ESD.xisf"
+    "2022 SN Candidate in Cygnus.R.96x10s.nocc.ESD.xisf"
+    "Soul Take 3 Panel 1.Ha.95x360s.PSFSW.ESD.xisf"
+    "Soul Take 3 Panel 2.R.49x180s.PSFSW.ESD.xisf"
+    "Crescent Nebula.Ha.53x360s.LF.xisf"
+    "M 101.SL.LRGB.L.6x180s.R.22x90s.R.8x180s.G.16x90s.G.8x180s.B.20x90s.B.8x180s.AllSubs.LF.LSPR.xisf"
+    "ARP 84 (NGC 5394 and NGC 5395).SL.L.21x180s.R.44x180s.G.32x180s.B.29x180s.ESD.LSPR.xisf"
+    "NGC 5935 NGC 5945 NGC 5943.R.16x180s.ESD.LSPR.xisf"
+    "wr134 Take 3.Ha.Best25.of.89x360s.ESD.xisf"
+    "Melotte 111.R.15x90s.ESD.xisf"
 )
 
 $targets | foreach-object {
@@ -24,41 +75,72 @@ $targets | foreach-object {
         Write-Warning "No alignment reference was specified... a new reference will automatically be selected."
         Wait-Event -Timeout 5
     }
+
+
+    
+
     $rawSubs = 
         Get-XisfLightFrames -Path $target -Recurse -UseCache -SkipOnError |
-        #where-object Instrument -eq "QHYCCD-Cameras-Capture (ASCOM)" |
-        where-object Instrument -eq "ZWO ASI183MM Pro" |
+        where-object Instrument -eq "QHY600M" |
         Where-Object {-not $_.HasTokensInPath(@("reject","process","planning","testing","clouds","draft","cloudy","_ez_LS_","drizzle","quick"))} |
-        #Where-Object Filter -NotIn @("R","B","G","Sii3") |
+        #Where-Object Filter -In @("Ha") |
         #Where-Object {-not $_.Filter.Contains("Oiii")} |
-        #Where-Object Filter -ne "V4" |
+        #Where-Object Exposure -eq 10 |
+        #Where-Object FocalRatio -eq "5.6" |
+        Where-Object Filter -ne "L" |
         #Where-Object Filter -eq "R" |
-        #Where-Object Filter -ne "Ha" |
-        #Where-Object Exposure -eq 180 |
-        #Where-object ObsDateMinus12hr -eq ([DateTime]"2021-05-05")
+        #Where-Object Filter -ne "G" |
+        #Where-Object Filter -ne "B" |
+        #Where-object ObsDateMinus12hr -eq ([DateTime]"2022-11-09")
         Where-Object {-not $_.IsIntegratedFile()} #|
         #select-object -First 30
     #$rawSubs|Format-Table Path,*
+
+    $uncalibrated = 
+        $rawSubs |
+        Get-XisfCalibrationState `
+            -CalibratedPath "E:\Calibrated\950mm" `
+            -Verbose -ShowProgress -ProgressTotalCount ($rawSubs.Count) |
+        foreach-object {
+            $x = $_
+            if(-not $x.IsCalibrated()){
+                $x
+            }
+            else {
+                #$x
+            }
+        } 
+
+    if($uncalibrated){
+        if((Read-Host -Prompt "Found $($uncalibrated.Count) uncalibrated files. Relocate to dropoff?") -eq "Y"){
+            $uncalibrated |
+                foreach-object {
+                    Move-Item $_.Path "D:\Backups\Camera\Dropoff\NINA" -verbose
+                }
+        }
+        exit
+    }
+
     $createSuperLum=$false
     $data=Invoke-XisfPostCalibrationMonochromeImageWorkflow `
         -RawSubs $rawSubs `
-        -CalibrationPath "F:\PixInsightLT\Calibrated" `
+        -CalibrationPath "E:\Calibrated\950mm" `
         -CorrectedOutputPath "S:\PixInsight\Corrected" `
         -WeightedOutputPath "S:\PixInsight\Weighted" `
-        <#-DarkLibraryPath "E:\Astrophotography\DarkLibrary\QHY268M"#> `
-        -DarkLibraryPath "E:\Astrophotography\DarkLibrary\ZWO ASI183MM Pro" `
+        -DarkLibraryPath "E:\Astrophotography\DarkLibrary\QHY600M" `
         -AlignedOutputPath "S:\PixInsight\Aligned" `
         -BackupCalibrationPaths @("M:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated") `
-        -PixInsightSlot 201 `
+        -PixInsightSlot 200 `
         -RerunCosmeticCorrection:$false `
         -SkipCosmeticCorrection:$false `
         -RerunWeighting:$false `
         -SkipWeighting:$false `
+        -PSFSignalWeightWeighting `
         -RerunAlignment:$false `
         -IntegratedImageOutputDirectory $target `
         -AlignmentReference $alignmentReference `
         -GenerateDrizzleData `
-        -ApprovalExpression "Median<60 && FWHM<1.41 && Stars > 1800" `
+        -ApprovalExpression "Median<42 && FWHM<5.5 && Stars > 2200" `
         -WeightingExpression "(15*(1-(FWHM-FWHMMin)/(FWHMMax-FWHMMin))
         +  5*(1-(Eccentricity-EccentricityMin)/(EccentricityMax-EccentricityMin))
         + 15*(SNRWeight-SNRWeightMin)/(SNRWeightMax-SNRWeightMin)
@@ -83,7 +165,6 @@ $targets | foreach-object {
             }
 
         if($createSuperLum){
-        <#Super Luminance#>
             $approved = $stacked.Aligned |
                 Get-XisfFitsStats | 
                 Where-Object Filter -ne "IR742"

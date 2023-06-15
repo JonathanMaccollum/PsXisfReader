@@ -32,7 +32,7 @@ $data = Invoke-XisfPostCalibrationColorImageWorkflow `
     -DebayeredOutputPath "S:\PixInsight\Debayered" `
     -DarkLibraryPath "E:\Astrophotography\DarkLibrary\ZWO ASI071MC Pro" `
     -AlignedOutputPath "S:\PixInsight\Aligned" `
-    -BackupCalibrationPaths @("T:\PixInsightLT\Calibrated","N:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated") `
+    -BackupCalibrationPaths @("M:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated") `
     -PixInsightSlot 200 `
     -RerunWeighting:$false `
     -RerunAlignment `

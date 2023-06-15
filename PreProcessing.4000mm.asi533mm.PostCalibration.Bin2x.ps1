@@ -4,9 +4,11 @@ if (-not (get-module psxisfreader)){import-module psxisfreader}
 $ErrorActionPreference="STOP"
 $VerbosePreference="Continue"
 $targets = @(
-     "E:\Astrophotography\90mm\Abell 35"
+     "E:\Astrophotography\4000mm\M36"
 )
 $referenceImages = @(
+    "M13 Take 4.G.140x10s.ESD.xisf"
+    "M36.L.351x5s.ESD.xisf"
 )
 
 $targets | foreach-object {
@@ -26,27 +28,51 @@ $targets | foreach-object {
     }
     $rawSubs = 
         Get-XisfLightFrames -Path $target -Recurse -UseCache -SkipOnError |
-        #where-object Instrument -eq "QHYCCD-Cameras-Capture (ASCOM)" |
-        where-object Instrument -eq "ZWO ASI183MM Pro" |
+        where-object Instrument -eq "ZWO ASI533MM Pro" |
         Where-Object {-not $_.HasTokensInPath(@("reject","process","planning","testing","clouds","draft","cloudy","_ez_LS_","drizzle","quick"))} |
-        #Where-Object Filter -NotIn @("R","B","G","Sii3") |
+        where-object Geometry -eq "1504:1504:1" |
+        #Where-Object Filter -In @("R","B","G") |
         #Where-Object {-not $_.Filter.Contains("Oiii")} |
-        #Where-Object Filter -ne "V4" |
-        #Where-Object Filter -eq "R" |
-        #Where-Object Filter -ne "Ha" |
         #Where-Object Exposure -eq 180 |
+        #Where-Object FocalRatio -eq "5.6" |
+        Where-Object Filter -ne "L" |
         #Where-object ObsDateMinus12hr -eq ([DateTime]"2021-05-05")
         Where-Object {-not $_.IsIntegratedFile()} #|
         #select-object -First 30
     #$rawSubs|Format-Table Path,*
+
+    $uncalibrated = 
+        $rawSubs |
+        Get-XisfCalibrationState `
+            -CalibratedPath "E:\Calibrated\4000mm" `
+            -Verbose -ShowProgress -ProgressTotalCount ($rawSubs.Count) |
+        foreach-object {
+            $x = $_
+            if(-not $x.IsCalibrated()){
+                $x
+            }
+            else {
+                #$x
+            }
+        } 
+
+    if($uncalibrated){
+        if((Read-Host -Prompt "Found $($uncalibrated.Count) uncalibrated files. Relocate to dropoff?") -eq "Y"){
+            $uncalibrated |
+                foreach-object {
+                    Move-Item $_.Path "D:\Backups\Camera\Dropoff\NINA" -verbose
+                }
+        }
+        exit
+    }
+
     $createSuperLum=$false
     $data=Invoke-XisfPostCalibrationMonochromeImageWorkflow `
         -RawSubs $rawSubs `
-        -CalibrationPath "F:\PixInsightLT\Calibrated" `
+        -CalibrationPath "E:\Calibrated\4000mm" `
         -CorrectedOutputPath "S:\PixInsight\Corrected" `
         -WeightedOutputPath "S:\PixInsight\Weighted" `
-        <#-DarkLibraryPath "E:\Astrophotography\DarkLibrary\QHY268M"#> `
-        -DarkLibraryPath "E:\Astrophotography\DarkLibrary\ZWO ASI183MM Pro" `
+        -DarkLibraryPath "E:\Astrophotography\DarkLibrary\ZWO ASI533MM Pro" `
         -AlignedOutputPath "S:\PixInsight\Aligned" `
         -BackupCalibrationPaths @("M:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated") `
         -PixInsightSlot 201 `
@@ -54,20 +80,16 @@ $targets | foreach-object {
         -SkipCosmeticCorrection:$false `
         -RerunWeighting:$false `
         -SkipWeighting:$false `
+        -PSFSignalWeightWeighting `
         -RerunAlignment:$false `
         -IntegratedImageOutputDirectory $target `
         -AlignmentReference $alignmentReference `
         -GenerateDrizzleData `
-        -ApprovalExpression "Median<60 && FWHM<1.41 && Stars > 1800" `
-        -WeightingExpression "(15*(1-(FWHM-FWHMMin)/(FWHMMax-FWHMMin))
-        +  5*(1-(Eccentricity-EccentricityMin)/(EccentricityMax-EccentricityMin))
-        + 15*(SNRWeight-SNRWeightMin)/(SNRWeightMax-SNRWeightMin)
-        + 30*(1-(Median-MedianMin)/(MedianMax-MedianMin))
-        + 20*(Stars-StarsMin)/(StarsMax-StarsMin))
-        + 20" `
+        -ApprovalExpression "Median<.25 && FWHM<6.5" `
+        -WeightingExpression "PSFSignalWeight" `
         -Rejection "Rejection_ESD" `
         -GenerateThumbnail `
-        -Verbose
+        -Verbose -KeepOpen
     if($data){
 
         $stacked = $data | where-object {$_.Aligned -and (Test-Path $_.Aligned)}
@@ -83,7 +105,6 @@ $targets | foreach-object {
             }
 
         if($createSuperLum){
-        <#Super Luminance#>
             $approved = $stacked.Aligned |
                 Get-XisfFitsStats | 
                 Where-Object Filter -ne "IR742"

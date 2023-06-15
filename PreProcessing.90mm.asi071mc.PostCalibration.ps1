@@ -25,9 +25,10 @@ $targets = @(
     #"E:\Astrophotography\90mm\Beehive and Massalia in Cancer"
     #"E:\Astrophotography\90mm\Whirlpool and Sunflower"
     #"E:\Astrophotography\90mm\Cygnus on Crescent"
-    "E:\Astrophotography\90mm\Between LBN691 and Polaris"
+    #"E:\Astrophotography\90mm\Between LBN691 and Polaris"
     #"E:\Astrophotography\90mm\Scorpius on HD145468"
     #"E:\Astrophotography\90mm\Scorpius on HD145468 Plus 1hr RA"
+    "E:\Astrophotography\90mm\Polaris Flare"
 )
 $referenceImages = @(
     "Hyades on HD28124.D1.13x180s.LF.xisf"
@@ -77,7 +78,7 @@ $targets | foreach-object {
         -DebayeredOutputPath "S:\PixInsight\Debayered" `
         -DarkLibraryPath "E:\Astrophotography\DarkLibrary\ZWO ASI071MC Pro" `
         -AlignedOutputPath "S:\PixInsight\Aligned" `
-        -BackupCalibrationPaths @("T:\PixInsightLT\Calibrated","N:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated") `
+        -BackupCalibrationPaths @("M:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated") `
         -PixInsightSlot 201 `
         -RerunCosmeticCorrection:$false `
         -SkipCosmeticCorrection:$false `

@@ -34,7 +34,7 @@ $data=Invoke-XisfPostCalibrationMonochromeImageWorkflow `
     -WeightedOutputPath "S:\PixInsight\Weighted" `
     -DarkLibraryPath "E:\Astrophotography\DarkLibrary\ZWO ASI183MM Pro" `
     -AlignedOutputPath "S:\PixInsight\Aligned" `
-    -BackupCalibrationPaths @("T:\PixInsightLT\Calibrated","N:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated") `
+    -BackupCalibrationPaths @("M:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated") `
     -PixInsightSlot 200 `
     -RerunCosmeticCorrection:$false `
     -SkipCosmeticCorrection:$false `

@@ -6,9 +6,9 @@ try{
     }
     if(Test-ModuleManifest -Path "../Modules/PsXisfReader/PsXisfReader.psd1" -Verbose){
         Publish-Module -Path "../Modules/PsXisfReader/" -NuGetApiKey  $PublishApiKey -Verbose
-    }    
+    }
 }
 finally{
     Pop-Location
 }
-Update-Module PsXisfReader
+Update-Module PsXisfReader -Force

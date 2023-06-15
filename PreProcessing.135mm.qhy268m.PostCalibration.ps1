@@ -83,7 +83,7 @@ $targets | foreach-object {
         <#-DarkLibraryPath "E:\Astrophotography\DarkLibrary\QHY268M"#> `
         -DarkLibraryPath "E:\Astrophotography\DarkLibrary\QHYCCD-Cameras-Capture (ASCOM)" `
         -AlignedOutputPath "S:\PixInsight\Aligned" `
-        -BackupCalibrationPaths @("T:\PixInsightLT\Calibrated","N:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated") `
+        -BackupCalibrationPaths @("M:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated") `
         -PixInsightSlot 201 `
         -RerunCosmeticCorrection:$false `
         -SkipCosmeticCorrection:$false `

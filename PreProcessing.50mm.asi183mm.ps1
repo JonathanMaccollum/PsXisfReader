@@ -1,10 +1,11 @@
 if (-not (get-module psxisfreader)){import-module psxisfreader}
 $ErrorActionPreference="STOP"
 $VerbosePreference="Continue"
-$DropoffLocation = "D:\Backups\Camera\Dropoff\NINACS"
+$DropoffLocation = "D:\Backups\Camera\Dropoff\NINA"
 $ArchiveDirectory="E:\Astrophotography"
 $CalibratedOutput = "F:\PixInsightLT\Calibrated"
 
+<#
 Invoke-DarkFrameSorting `
     -DropoffLocation $DropoffLocation `
     -ArchiveDirectory $ArchiveDirectory `
@@ -19,6 +20,7 @@ Invoke-FlatFrameSorting `
     -ArchiveDirectory $ArchiveDirectory `
     -CalibratedFlatsOutput "F:\PixInsightLT\CalibratedFlats" `
     -PixInsightSlot 200
+    #>
 
 $DarkLibraryFiles = Get-MasterDarkLibrary `
     -Path "E:\Astrophotography\DarkLibrary\ZWO ASI183MM Pro" `
@@ -44,7 +46,9 @@ Get-ChildItem $DropoffLocation *.xisf |
     Get-XisfFitsStats | 
     where-object Instrument -eq "ZWO ASI183MM Pro" |
     where-object ImageType -eq "LIGHT" |
+    where-object Object -eq "Cygnus on HD228421" |
     where-object FocalLength -eq 50 |
+    #select-object -First 2 |
     group-object Instrument,SetTemp,Gain,Offset,Exposure |
     foreach-object {
         $lights = $_.Group
@@ -75,7 +79,7 @@ Get-ChildItem $DropoffLocation *.xisf |
                 foreach-object {
                     $filter = $_.Group[0].Filter
                     $focalLength=$_.Group[0].FocalLength
-                    $masterFlat = $null #"E:\Astrophotography\$($focalLength)mm\Flats\20200926.MasterFlatCal.$filter.xisf"
+                    $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20220517.MasterFlatCal.$filter.xisf"
 
                     #if(-not (test-path $masterFlat)) {
                     #    Write-Warning "Skipping $($_.Group.Count) frames at ($focalLength)mm with filter $filter. Reason: No master flat was found."

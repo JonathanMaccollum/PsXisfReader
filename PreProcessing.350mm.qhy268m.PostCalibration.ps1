@@ -4,9 +4,17 @@ if (-not (get-module psxisfreader)){import-module psxisfreader}
 $ErrorActionPreference="STOP"
 $VerbosePreference="Continue"
 $targets = @(
-     "E:\Astrophotography\90mm\Abell 35"
+    #"E:\Astrophotography\350mm\Draco near SAO HD 133229"
+    #"E:\Astrophotography\350mm\Cygnus - wr134 to Tulip"
+    #"E:\Astrophotography\350mm\M 101"
+    "E:\Astrophotography\350mm\Crescent and sh2-108"
+    #"E:\Astrophotography\350mm\Melotte 111"
 )
 $referenceImages = @(
+    "Draco near SAO HD 133229.L3.21x180s.PSFSW.ESD.xisf"
+    "Cygnus - wr134 to Tulip.L3.24x180s.ESD.LSPR.xisf"
+    "M 101.L3.24x180s.PSFSW.ESD.LSPR.xisf"
+    "Crescent and sh2-108.Ha6nmMaxFR.65x360s.PSFSW.ESD.xisf"
 )
 
 $targets | foreach-object {
@@ -26,48 +34,61 @@ $targets | foreach-object {
     }
     $rawSubs = 
         Get-XisfLightFrames -Path $target -Recurse -UseCache -SkipOnError |
-        #where-object Instrument -eq "QHYCCD-Cameras-Capture (ASCOM)" |
-        where-object Instrument -eq "ZWO ASI183MM Pro" |
+        where-object Instrument -eq "QHY268M" |
         Where-Object {-not $_.HasTokensInPath(@("reject","process","planning","testing","clouds","draft","cloudy","_ez_LS_","drizzle","quick"))} |
-        #Where-Object Filter -NotIn @("R","B","G","Sii3") |
-        #Where-Object {-not $_.Filter.Contains("Oiii")} |
-        #Where-Object Filter -ne "V4" |
-        #Where-Object Filter -eq "R" |
-        #Where-Object Filter -ne "Ha" |
-        #Where-Object Exposure -eq 180 |
-        #Where-object ObsDateMinus12hr -eq ([DateTime]"2021-05-05")
+        where-object Geometry -eq "6252:4176:1" |
+        #where-object ObsDateMinus12hr -ge "2023-05-03" |
         Where-Object {-not $_.IsIntegratedFile()} #|
-        #select-object -First 30
-    #$rawSubs|Format-Table Path,*
+
+    $uncalibrated = 
+        $rawSubs |
+        Get-XisfCalibrationState `
+            -CalibratedPath "E:\Calibrated\350mm" `
+            -Verbose -ShowProgress -ProgressTotalCount ($rawSubs.Count) |
+        foreach-object {
+            $x = $_
+            if(-not $x.IsCalibrated()){
+                $x
+            }
+            else {
+                #$x
+            }
+        } 
+
+    if($uncalibrated){
+        if((Read-Host -Prompt "Found $($uncalibrated.Count) uncalibrated files. Relocate to dropoff?") -eq "Y"){
+            $uncalibrated |
+                foreach-object {
+                    Move-Item $_.Path "D:\Backups\Camera\Dropoff\NINA" -verbose
+                }
+        }
+        exit
+    }
+
     $createSuperLum=$false
     $data=Invoke-XisfPostCalibrationMonochromeImageWorkflow `
         -RawSubs $rawSubs `
-        -CalibrationPath "F:\PixInsightLT\Calibrated" `
+        -CalibrationPath "E:\Calibrated\350mm" `
         -CorrectedOutputPath "S:\PixInsight\Corrected" `
         -WeightedOutputPath "S:\PixInsight\Weighted" `
-        <#-DarkLibraryPath "E:\Astrophotography\DarkLibrary\QHY268M"#> `
-        -DarkLibraryPath "E:\Astrophotography\DarkLibrary\ZWO ASI183MM Pro" `
+        -DarkLibraryPath "E:\Astrophotography\DarkLibrary\QHY268M" `
         -AlignedOutputPath "S:\PixInsight\Aligned" `
         -BackupCalibrationPaths @("M:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated") `
         -PixInsightSlot 201 `
         -RerunCosmeticCorrection:$false `
         -SkipCosmeticCorrection:$false `
         -RerunWeighting:$false `
-        -SkipWeighting:$false `
+        -SkipWeighting:$true `
+        -PSFSignalWeightWeighting `
         -RerunAlignment:$false `
         -IntegratedImageOutputDirectory $target `
         -AlignmentReference $alignmentReference `
         -GenerateDrizzleData `
-        -ApprovalExpression "Median<60 && FWHM<1.41 && Stars > 1800" `
-        -WeightingExpression "(15*(1-(FWHM-FWHMMin)/(FWHMMax-FWHMMin))
-        +  5*(1-(Eccentricity-EccentricityMin)/(EccentricityMax-EccentricityMin))
-        + 15*(SNRWeight-SNRWeightMin)/(SNRWeightMax-SNRWeightMin)
-        + 30*(1-(Median-MedianMin)/(MedianMax-MedianMin))
-        + 20*(Stars-StarsMin)/(StarsMax-StarsMin))
-        + 20" `
+        -ApprovalExpression "Median<142 && FWHM<5.5 && Stars > 1000" `
+        -WeightingExpression "PSFSignalWeight" `
         -Rejection "Rejection_ESD" `
         -GenerateThumbnail `
-        -Verbose
+        -Verbose 
     if($data){
 
         $stacked = $data | where-object {$_.Aligned -and (Test-Path $_.Aligned)}
@@ -83,7 +104,6 @@ $targets | foreach-object {
             }
 
         if($createSuperLum){
-        <#Super Luminance#>
             $approved = $stacked.Aligned |
                 Get-XisfFitsStats | 
                 Where-Object Filter -ne "IR742"
@@ -151,5 +171,4 @@ $targets | foreach-object {
             $data | Export-Clixml -Path (Join-Path $target "Stats.$($mostRecent.LocalDate.ToString('yyyyMMdd HHmmss')).clixml")
         }
     }
-
 }

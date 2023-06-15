@@ -4,9 +4,33 @@ if (-not (get-module psxisfreader)){import-module psxisfreader}
 $ErrorActionPreference="STOP"
 $VerbosePreference="Continue"
 $targets = @(
-     "E:\Astrophotography\90mm\Abell 35"
+     #"E:\Astrophotography\90mm\Lyra on Lyr A"
+     #"E:\Astrophotography\90mm\Cygnus on HD192143"
+     #"E:\Astrophotography\90mm\Scorpius on TYC 6202-0266-1"
+     #"E:\Astrophotography\90mm\Ursa Minor"
+     #"E:\Astrophotography\90mm\Sag near GSC 6265-2391"
+     #"E:\Astrophotography\90mm\Cygnus to Vulpecula"
+     #"E:\Astrophotography\90mm\Cygnus on HD195405"
+     #"E:\Astrophotography\90mm\Cepheus near CTB-1"
+     #"E:\Astrophotography\90mm\Orion on 48 Ori"
+     #"E:\Astrophotography\90mm\String of Pearls in Monoceros"
+     #"E:\Astrophotography\90mm\Beehive Cluster Widefield"
+     #"E:\Astrophotography\90mm\LDN 1472 in Perseus"
+     #"E:\Astrophotography\90mm\C2022 E3 ZTF Widefield Take 9 (Hyades)"
+     "E:\Astrophotography\90mm\M81 M82 Region"
 )
 $referenceImages = @(
+    "Lyra on Lyr A.R.20x180s.ESD.OvercorrectedFlats.xisf"
+    "Cygnus on HD192143.Ha6nmMaxFR.14x180s.ESD.xisf"
+    "Scorpius on TYC 6202-0266-1.Ha6nmMaxFR.55x180s.ESD.xisf"
+    "Sag near GSC 6265-2391.Ha6nmMaxFR.8x180s.ESD.xisf"
+    "Cygnus on HD195405.Ha6nmMaxFR.16x180s.PSFSW.LF.xisf"
+    "Cygnus to Vulpecula.R.11x90s.noweights.ESD.xisf"
+    "Cepheus near CTB-1.Ha6nmMaxFR.23x720s.ESD.LN.xisf"
+    "Orion on 48 Ori.Ha6nmMaxFR.29x720s.ESD.LN.xisf"
+    "LDN 1472 in Perseus.L3.36x360s.ESD.xisf"
+    "String of Pearls in Monoceros.Ha6nmMaxFR.18x180s.Ha6nmMaxFR.20x720s.ESD.LN.xisf"
+    "M81 M82 Region.L3.29x360s.ESD.xisf"
 )
 
 $targets | foreach-object {
@@ -26,27 +50,52 @@ $targets | foreach-object {
     }
     $rawSubs = 
         Get-XisfLightFrames -Path $target -Recurse -UseCache -SkipOnError |
-        #where-object Instrument -eq "QHYCCD-Cameras-Capture (ASCOM)" |
-        where-object Instrument -eq "ZWO ASI183MM Pro" |
+        where-object Instrument -eq "QHY600M" |
         Where-Object {-not $_.HasTokensInPath(@("reject","process","planning","testing","clouds","draft","cloudy","_ez_LS_","drizzle","quick"))} |
-        #Where-Object Filter -NotIn @("R","B","G","Sii3") |
+        where-object Geometry -eq "9576:6388:1" |
+        #Where-Object Filter -In @("R","B","G") |
         #Where-Object {-not $_.Filter.Contains("Oiii")} |
-        #Where-Object Filter -ne "V4" |
-        #Where-Object Filter -eq "R" |
-        #Where-Object Filter -ne "Ha" |
         #Where-Object Exposure -eq 180 |
+        #Where-Object FocalRatio -eq "5.6" |
+        Where-Object Filter -eq "L3" |
+        Where-Object Gain -eq 26 |
         #Where-object ObsDateMinus12hr -eq ([DateTime]"2021-05-05")
         Where-Object {-not $_.IsIntegratedFile()} #|
         #select-object -First 30
     #$rawSubs|Format-Table Path,*
+
+    $uncalibrated = 
+        $rawSubs |
+        Get-XisfCalibrationState `
+            -CalibratedPath "E:\Recalibrated\90mm" `
+            -Verbose -ShowProgress -ProgressTotalCount ($rawSubs.Count) |
+        foreach-object {
+            $x = $_
+            if(-not $x.IsCalibrated()){
+                $x
+            }
+            else {
+                #$x
+            }
+        } 
+
+    # if($uncalibrated){
+    #     if((Read-Host -Prompt "Found $($uncalibrated.Count) uncalibrated files. Relocate to dropoff?") -eq "Y"){
+    #         $uncalibrated |
+    #             foreach-object {
+    #                 Move-Item $_.Path "D:\Backups\Camera\Dropoff\NINA" -verbose
+    #             }
+    #     }
+    #     exit
+    # }
+
     $createSuperLum=$false
     $data=Invoke-XisfPostCalibrationMonochromeImageWorkflow `
         -RawSubs $rawSubs `
-        -CalibrationPath "F:\PixInsightLT\Calibrated" `
+        -CalibrationPath "E:\Recalibrated\90mm" `
         -CorrectedOutputPath "S:\PixInsight\Corrected" `
         -WeightedOutputPath "S:\PixInsight\Weighted" `
-        <#-DarkLibraryPath "E:\Astrophotography\DarkLibrary\QHY268M"#> `
-        -DarkLibraryPath "E:\Astrophotography\DarkLibrary\ZWO ASI183MM Pro" `
+        -DarkLibraryPath "E:\Astrophotography\DarkLibrary\QHY600M" `
         -AlignedOutputPath "S:\PixInsight\Aligned" `
         -BackupCalibrationPaths @("M:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated") `
         -PixInsightSlot 201 `
@@ -54,20 +103,16 @@ $targets | foreach-object {
         -SkipCosmeticCorrection:$false `
         -RerunWeighting:$false `
         -SkipWeighting:$false `
+        -PSFSignalWeightWeighting `
         -RerunAlignment:$false `
         -IntegratedImageOutputDirectory $target `
         -AlignmentReference $alignmentReference `
         -GenerateDrizzleData `
-        -ApprovalExpression "Median<60 && FWHM<1.41 && Stars > 1800" `
-        -WeightingExpression "(15*(1-(FWHM-FWHMMin)/(FWHMMax-FWHMMin))
-        +  5*(1-(Eccentricity-EccentricityMin)/(EccentricityMax-EccentricityMin))
-        + 15*(SNRWeight-SNRWeightMin)/(SNRWeightMax-SNRWeightMin)
-        + 30*(1-(Median-MedianMin)/(MedianMax-MedianMin))
-        + 20*(Stars-StarsMin)/(StarsMax-StarsMin))
-        + 20" `
+        -ApprovalExpression "Median<42 && FWHM<5.5 && Stars > 8000" `
+        -WeightingExpression "PSFSignalWeight" `
         -Rejection "Rejection_ESD" `
         -GenerateThumbnail `
-        -Verbose
+        -Verbose 
     if($data){
 
         $stacked = $data | where-object {$_.Aligned -and (Test-Path $_.Aligned)}
@@ -83,7 +128,6 @@ $targets | foreach-object {
             }
 
         if($createSuperLum){
-        <#Super Luminance#>
             $approved = $stacked.Aligned |
                 Get-XisfFitsStats | 
                 Where-Object Filter -ne "IR742"
@@ -153,3 +197,6 @@ $targets | foreach-object {
     }
 
 }
+
+$data=Import-Clixml -Path "E:\Astrophotography\90mm\M81 M82 Region\Stats.20230316 030934.clixml" 
+$data|where-object Aligned -ne $null | Foreach-Object {$_.Stats}

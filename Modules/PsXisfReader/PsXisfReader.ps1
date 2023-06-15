@@ -21,6 +21,13 @@ class XisfFileStats {
     [decimal]$YPIXSZ
     [string]$Geometry
     [decimal]$Rotator
+
+    [string]$ReadoutMode
+    [string]$UsbLimit
+    [string]$PierSide
+    [string]$FilterWheel
+    [string]$Telescope
+
     [bool]HasTokensInPath([string[]]$tokens){
             $hasToken=$false
             foreach( $x in $tokens) {
@@ -115,7 +122,9 @@ Function Get-XisfFitsStats
         if($Cache -and $Cache.ContainsKey($Path.FullName))
         {
             $result = $Cache[$Path.FullName]
-            
+            if($result.Object -and $result.Object.Contains("/")){
+                $result.Object = $result.Object.Replace("/","-")
+            }
             Write-Output ([XisfFileStats]@{
                 Exposure=$result.Exposure
                 Filter=$result.Filter
@@ -139,6 +148,11 @@ Function Get-XisfFitsStats
                 YPIXSZ=$result.YPIXSZ
                 Geometry=$result.Geometry
                 Rotator=$result.Rotator
+                ReadoutMode=$result.ReadoutMode
+                UsbLimit=$result.UsbLimit
+                PierSide=$result.PierSide
+                Filterwheel=$result.Filterwheel
+                Telescope=$result.Telescope
             })
         }
         elseif($ErrorCache -and $ErrorCache.ContainsKey($Path.FullName)){
@@ -170,7 +184,7 @@ Function Get-XisfFitsStats
                     Exposure=$fits.Where{$_.Name -eq 'EXPOSURE'}.value
                     Filter=$filter
                     Instrument=$fits.Where{$_.Name -eq 'INSTRUME'}.value|%{if($_){$_.Trim("'")}} | select-object -First 1
-                    Object=$fits.Where{$_.Name -eq 'OBJECT'}.value|%{if($_){$_.Trim("'")}} | select-object -First 1
+                    Object=$fits.Where{$_.Name -eq 'OBJECT'}.value|%{if($_){$_.Trim("'").Replace("/","-")}} | select-object -First 1
                     Gain=$fits.Where{$_.Name -eq 'GAIN'}.value | select-object -First 1
                     Offset=$fits.Where{$_.Name -eq 'OFFSET'}.value | select-object -First 1
                     ImageType=$fits.Where{$_.Name -eq 'IMAGETYP'}.value|%{if($_){$_.Trim("'")}} | select-object -First 1
@@ -187,6 +201,13 @@ Function Get-XisfFitsStats
                     XPIXSZ=$fits.Where{$_.Name -eq 'XPIXSZ'}.value|%{if($_){$_.Trim("'")}} | select-object -First 1
                     YPIXSZ=$fits.Where{$_.Name -eq 'YPIXSZ'}.value|%{if($_){$_.Trim("'")}} | select-object -First 1
                     Rotator=$fits.Where{$_.Name -eq 'ROTATOR'}.value|%{if($_){$_.Trim("'")}} | select-object -First 1
+
+                    ReadoutMode=$fits.Where{$_.Name -eq 'READOUTM'}.value|%{if($_){$_.Trim("'")}} | select-object -First 1
+                    UsbLimit=$fits.Where{$_.Name -eq 'USBLIMIT'}.value|%{if($_){$_.Trim("'")}} | select-object -First 1
+                    PierSide=$fits.Where{$_.Name -eq 'PIERSIDE'}.value|%{if($_){$_.Trim("'")}} | select-object -First 1
+                    Filterwheel=$fits.Where{$_.Name -eq 'FWHEEL'}.value|%{if($_){$_.Trim("'")}} | select-object -First 1
+                    Telescope=$fits.Where{$_.Name -eq 'TELESCOP'}.value|%{if($_){$_.Trim("'")}} | select-object -First 1
+
                     Path=$Path
                     Geometry=$geometry
                 }

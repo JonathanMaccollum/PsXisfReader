@@ -1,30 +1,53 @@
 if (-not (get-module psxisfreader)){import-module psxisfreader}
 $ErrorActionPreference="STOP"
 
-$target="E:\Astrophotography\40mm\Large Dark Nebula Complex in Aquila 40mm OSC"
+#$target="E:\Astrophotography\40mm\Lobster Claw and Cave"
+#$target="E:\Astrophotography\40mm\Anglerfish Dark Shark Rosebud Panel 1"
+#$target="E:\Astrophotography\40mm\Cepheus near Alrai"
+#$target="E:\Astrophotography\40mm\LDN 1472 in Perseus"
+#$target="E:\Astrophotography\40mm\Crescent Oxygen River"
+#$target="E:\Astrophotography\40mm\Cepheus on Barnard 170"
+#$target="E:\Astrophotography\40mm\Cygnus near DWB111"
+#$target="E:\Astrophotography\40mm\Heart and Soul"
+#$target="E:\Astrophotography\40mm\Flaming Star Region"
+$target="E:\Astrophotography\40mm\NGC1333 Region"
+#$target="E:\Astrophotography\40mm\Cepheus near CTB-1"
+#$target="E:\Astrophotography\40mm\Cygnus near Sh2-115"
+
 $alignmentReference=$null
 
 
 #$alignmentReference="E:\Astrophotography\50mm\Orion 50mm\Orion 50mm.Ha3nm.30x6min.ESD.Drizzle2x.xisf"
 #$alignmentReference=Join-Path $target "Omega 40mm OSC.D1.63x180s.ESD.Drizzled.xisf"
+#$alignmentReference=Join-Path $target "Cepheus on Barnard 170.L3.27x360s.ESD.LN.xisf"
+#$alignmentReference=Join-Path $target "LDN 1472 in Perseus.L3.83x360s.PSFSW.ESD.LN.xisf"
+#$alignmentReference=Join-Path $target "Heart and Soul.L3.61x360s.ESD.xisf"
+#$alignmentReference=Join-Path $target "Crescent Oxygen River.L3.37x360s.ESD.LN.xisf"
+#$alignmentReference=Join-Path $target "Cygnus near DWB111.L3.88x360s.ESD.xisf"
+#$alignmentReference=Join-Path $target "Anglerfish Dark Shark Rosebud.L3.49x360s.ESD.LN.xisf"
+$alignmentReference=Join-Path $target "NGC1333 Region.L3.205x360s.ESD.LN.xisf"
+
+
 Clear-Host
 
 $rawSubs =
     Get-XisfLightFrames -Path $target -Recurse |
     Where-Object {-not $_.HasTokensInPath(@("reject","process","testing","clouds","draft","cloudy","_ez_LS_"))} |
-    Where-Object {-not $_.IsIntegratedFile()} 
+    Where-Object {-not $_.IsIntegratedFile()} |
+    #where-object FocalRatio -eq 2.8 |
+    where-object Instrument -eq "ZWO ASI071MC Pro"
 
 #    -CalibrationPath "F:\PixInsightLT\Calibrated\M81 M82 50mm\SuperFlatted" `
 
 $data = Invoke-XisfPostCalibrationColorImageWorkflow `
     -RawSubs $rawSubs `
     -CorrectedOutputPath "S:\PixInsight\Corrected" `
-    -CalibrationPath "F:\PixInsightLT\Calibrated" `
+    -CalibrationPath "E:\Calibrated\40mm" `
     -WeightedOutputPath "S:\PixInsight\Weighted" `
     -DebayeredOutputPath "S:\PixInsight\Debayered" `
     -DarkLibraryPath "E:\Astrophotography\DarkLibrary\ZWO ASI071MC Pro" `
     -AlignedOutputPath "S:\PixInsight\Aligned" `
-    -BackupCalibrationPaths @("T:\PixInsightLT\Calibrated","N:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated") `
+    -BackupCalibrationPaths @("M:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated") `
     -PixInsightSlot 201 `
     -RerunCosmeticCorrection:$false `
     -SkipCosmeticCorrection:$false `
@@ -34,6 +57,7 @@ $data = Invoke-XisfPostCalibrationColorImageWorkflow `
     -IntegratedImageOutputDirectory $target `
     -AlignmentReference $alignmentReference `
     -GenerateDrizzleData `
+    -Rejection "Rejection_ESD" `
     -CfaPattern "RGGB" `
     -ApprovalExpression "Median<100 && FWHM<4.5" `
     -WeightingExpression "(15*(1-(FWHM-FWHMMin)/(FWHMMax-FWHMMin))
@@ -62,7 +86,7 @@ if((Read-Host -Prompt "Cleanup intermediate files (debayered, weighted, aligned,
         $_.RemoveAlignedAndDrizzleFiles()
         $_.RemoveWeightedFiles()
         $_.RemoveDebayeredFiles()
-        #$_.RemoveCorrectedFiles()
+        $_.RemoveCorrectedFiles()
     }
 }
 

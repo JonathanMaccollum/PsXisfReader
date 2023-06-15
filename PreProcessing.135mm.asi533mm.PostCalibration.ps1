@@ -4,9 +4,12 @@ if (-not (get-module psxisfreader)){import-module psxisfreader}
 $ErrorActionPreference="STOP"
 $VerbosePreference="Continue"
 $targets = @(
-     "E:\Astrophotography\90mm\Abell 35"
+     "E:\Astrophotography\135mm\Crescent Oxygen River"
+     "E:\Astrophotography\135mm\sh2-112 - Widefield"
+
 )
 $referenceImages = @(
+    "Crescent Oxygen River.Oiii.58x360s.ESD2.xisf"
 )
 
 $targets | foreach-object {
@@ -24,41 +27,69 @@ $targets | foreach-object {
         Write-Warning "No alignment reference was specified... a new reference will automatically be selected."
         Wait-Event -Timeout 5
     }
+
+
+    
+
     $rawSubs = 
         Get-XisfLightFrames -Path $target -Recurse -UseCache -SkipOnError |
-        #where-object Instrument -eq "QHYCCD-Cameras-Capture (ASCOM)" |
-        where-object Instrument -eq "ZWO ASI183MM Pro" |
+        where-object Instrument -eq "ZWO ASI533MM Pro" |
         Where-Object {-not $_.HasTokensInPath(@("reject","process","planning","testing","clouds","draft","cloudy","_ez_LS_","drizzle","quick"))} |
-        #Where-Object Filter -NotIn @("R","B","G","Sii3") |
+        #Where-Object Filter -In @("L","Sii3") |
         #Where-Object {-not $_.Filter.Contains("Oiii")} |
-        #Where-Object Filter -ne "V4" |
-        #Where-Object Filter -eq "R" |
-        #Where-Object Filter -ne "Ha" |
         #Where-Object Exposure -eq 180 |
+        #Where-Object FocalRatio -eq "5.6" |
+        #Where-Object Filter -eq "Oiii6nm" |
         #Where-object ObsDateMinus12hr -eq ([DateTime]"2021-05-05")
         Where-Object {-not $_.IsIntegratedFile()} #|
         #select-object -First 30
     #$rawSubs|Format-Table Path,*
+
+    $uncalibrated = 
+        $rawSubs |
+        Get-XisfCalibrationState `
+            -CalibratedPath "F:\PixInsightLT\Calibrated" `
+            -Verbose -ShowProgress -ProgressTotalCount ($rawSubs.Count) |
+        foreach-object {
+            $x = $_
+            if(-not $x.IsCalibrated()){
+                $x
+            }
+            else {
+                #$x
+            }
+        } 
+
+    if($uncalibrated){
+        if((Read-Host -Prompt "Found $($uncalibrated.Count) uncalibrated files. Relocate to dropoff?") -eq "Y"){
+            $uncalibrated |
+                foreach-object {
+                    Move-Item $_.Path "D:\Backups\Camera\Dropoff\NINA" -verbose
+                }
+        }
+        exit
+    }
+
     $createSuperLum=$false
     $data=Invoke-XisfPostCalibrationMonochromeImageWorkflow `
         -RawSubs $rawSubs `
         -CalibrationPath "F:\PixInsightLT\Calibrated" `
         -CorrectedOutputPath "S:\PixInsight\Corrected" `
         -WeightedOutputPath "S:\PixInsight\Weighted" `
-        <#-DarkLibraryPath "E:\Astrophotography\DarkLibrary\QHY268M"#> `
-        -DarkLibraryPath "E:\Astrophotography\DarkLibrary\ZWO ASI183MM Pro" `
+        -DarkLibraryPath "E:\Astrophotography\DarkLibrary\ZWO ASI533MM Pro" `
         -AlignedOutputPath "S:\PixInsight\Aligned" `
         -BackupCalibrationPaths @("M:\PixInsightLT\Calibrated","S:\PixInsightLT\Calibrated") `
-        -PixInsightSlot 201 `
+        -PixInsightSlot 200 `
         -RerunCosmeticCorrection:$false `
         -SkipCosmeticCorrection:$false `
         -RerunWeighting:$false `
         -SkipWeighting:$false `
+        -PSFSignalWeightWeighting `
         -RerunAlignment:$false `
         -IntegratedImageOutputDirectory $target `
         -AlignmentReference $alignmentReference `
         -GenerateDrizzleData `
-        -ApprovalExpression "Median<60 && FWHM<1.41 && Stars > 1800" `
+        -ApprovalExpression "Median<45 && FWHM<5.5 && Stars > 2200" `
         -WeightingExpression "(15*(1-(FWHM-FWHMMin)/(FWHMMax-FWHMMin))
         +  5*(1-(Eccentricity-EccentricityMin)/(EccentricityMax-EccentricityMin))
         + 15*(SNRWeight-SNRWeightMin)/(SNRWeightMax-SNRWeightMin)
@@ -83,7 +114,6 @@ $targets | foreach-object {
             }
 
         if($createSuperLum){
-        <#Super Luminance#>
             $approved = $stacked.Aligned |
                 Get-XisfFitsStats | 
                 Where-Object Filter -ne "IR742"
