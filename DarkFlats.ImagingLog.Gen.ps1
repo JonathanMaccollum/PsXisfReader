@@ -286,14 +286,77 @@ $(Format-MDExposureTableDatesOverFilter -Data $subsForTarget -IncludeTotals)"
 
     $content | out-file $file -Force
 }
+
+Function Out-TargetWorkInProgressPage
+{
+    param(
+        $fileName,
+        $outputDir,
+        $date,
+        $object,
+        $integrationTime,
+        $telescope,
+        $instrument,
+        $nightsImaged,
+        $started,
+        $latest,
+        $thumbnails,
+        $subsForTarget,
+        $focalLength,
+        $detailLink
+    )
+
+    [System.IO.Directory]::CreateDirectory($outputDir)>>$null
+    $file = join-path $outputDir $fileName
+
+    $mostRecentThumbnail = $thumbnails |
+        Where-Object {-not $_.Url.Contains("Annotated")} |
+        Select-Object -First 1
+
+        if(-not $mostRecentThumbnail){
+            return 
+        }
+
+    $content = "---
+title: $object
+date: $($mostRecentThumbnail.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss'))
+tags: 
+- $object
+- $($focalLength)mm
+- $instrument
+- $telescope
+---
+
+* Total time: $($integrationTime.Total | Format-ExposureTime)
+* Scope: $telescope
+* Camera: $instrument
+* [More Details]($detailLink)
+
+"
+    $thumbnails | 
+        Where-Object {-not $_.Url.Contains("Annotated")} |
+        where-object {-not $_.Details} |
+        Select-Object -First 3 |
+        foreach-object {
+            if($_.Details){
+                $content += "* $($_.Details)
+
+"
+            }
+            $content += "![$($_.Name)]($($_.Url) `"$($_.Name)`")
+"
+        }
+    $content | out-file $file -Force
+}
+
 @(
-    #40
-    #50
-    #90
-    #135
-    #350
+    40
+    50
+    90
+    135
+    350
     950
-    #1000
+    1000
     )|ForEach-Object{
         $focalLength=$_
 
@@ -463,6 +526,7 @@ $(Format-MDExposureTableDatesOverFilter -Data $subsForTarget -IncludeTotals)"
                             Name = "$object - $filter"
                             Url = "/ImagingLog/$($focalLength)mm/Thumbnails/$webPath"
                             Details = "$filter : $($integrationTimeByFilter.Total | Format-ExposureTime)"
+                            LastWriteTime=$mostRecentThumbnail.LastWriteTime
                         }
                     }
 
@@ -479,6 +543,23 @@ $(Format-MDExposureTableDatesOverFilter -Data $subsForTarget -IncludeTotals)"
                         -latest $stats.Maximum `
                         -thumbnails $thumbnails `
                         -subsForTarget $subsForTarget
+                    if($thumbnails){
+                        Out-TargetWorkInProgressPage `
+                            -fileName "$($object).$($focalLength)mm.md" `
+                            -outputDir "S:\JonsAstro\projects.darkflats.com\source\_posts" `
+                            -date $stats.Maximum `
+                            -object $object `
+                            -integrationTime $integrationTime `
+                            -telescope $telescope `
+                            -instrument $subsForTarget[0].Instrument `
+                            -nightsImaged $nights.Count `
+                            -started $stats.Minimum `
+                            -latest $stats.Maximum `
+                            -thumbnails $thumbnails `
+                            -subsForTarget $subsForTarget `
+                            -FocalLength $focalLength `
+                            -DetailLink ([System.Web.HttpUtility]::UrlPathEncode("/ImagingLog/$($focalLength)mm/$($object).html"))
+                    }
             }
 
         $fullTable = Format-MDExposureTableDatesAndObjectOverFilter `
