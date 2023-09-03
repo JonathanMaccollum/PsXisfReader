@@ -116,7 +116,8 @@ Function Get-XisfFitsStats
     (
         [Parameter(ValueFromPipeline=$true,Mandatory=$true)][System.IO.FileInfo]$Path,
         [Parameter(ValueFromPipeline=$false)][Hashtable]$Cache,
-        [Parameter(ValueFromPipeline=$false)][Hashtable]$ErrorCache
+        [Parameter(ValueFromPipeline=$false)][Hashtable]$ErrorCache,
+        [Parameter(ValueFromPipeline=$false)][Switch]$TruncateFilterBandpass
     )
     process{            
         if($Cache -and $Cache.ContainsKey($Path.FullName))
@@ -167,9 +168,12 @@ Function Get-XisfFitsStats
                 $geometry = $header.xisf.Image.geometry
                 $fits = $header.xisf.Image.FITSKeyword
                 $filter = $fits.Where({$_.Name -eq 'FILTER'}).value
-                if($filter)
+                if($filter -and $TruncateFilterBandpass)
                 {
-                    $filter = $filter.Replace('5nm','').Replace('3nm','').Replace("'","")
+                    $filter = $filter.Replace('5nm','').Replace('3nm','')
+                }
+                if($filter){
+                    $filter = $filter.Replace("'","")
                 }
                 $obsDate = $fits.Where{$_.Name -eq 'DATE-OBS'}.value | Select-Object -First 1
                 $obsDateMinus12hr= $null
