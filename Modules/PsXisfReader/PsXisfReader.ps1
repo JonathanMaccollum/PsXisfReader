@@ -19,6 +19,8 @@ class XisfFileStats {
     [System.IO.FileInfo]$Path
     [decimal]$XPIXSZ
     [decimal]$YPIXSZ
+    [decimal]$XBinning
+    [decimal]$YBinning
     [string]$Geometry
     [decimal]$Rotator
 
@@ -147,6 +149,8 @@ Function Get-XisfFitsStats
                 Path=$Path
                 XPIXSZ=$result.XPIXSZ
                 YPIXSZ=$result.YPIXSZ
+                XBinning=$result.XBinning
+                YBinning=$result.YBinning
                 Geometry=$result.Geometry
                 Rotator=$result.Rotator
                 ReadoutMode=$result.ReadoutMode
@@ -204,6 +208,8 @@ Function Get-XisfFitsStats
                     History=$fits.Where{$_.Name -eq 'HISTORY'}.comment
                     XPIXSZ=$fits.Where{$_.Name -eq 'XPIXSZ'}.value|%{if($_){$_.Trim("'")}} | select-object -First 1
                     YPIXSZ=$fits.Where{$_.Name -eq 'YPIXSZ'}.value|%{if($_){$_.Trim("'")}} | select-object -First 1
+                    XBinning=$fits.Where{$_.Name -eq 'XBINNING'}.value|%{if($_){$_.Trim("'")}} | select-object -First 1
+                    YBinning=$fits.Where{$_.Name -eq 'YBINNING'}.value|%{if($_){$_.Trim("'")}} | select-object -First 1
                     Rotator=$fits.Where{$_.Name -eq 'ROTATOR'}.value|%{if($_){$_.Trim("'")}} | select-object -First 1
 
                     ReadoutMode=$fits.Where{$_.Name -eq 'READOUTM'}.value|%{if($_){$_.Trim("'")}} | select-object -First 1
