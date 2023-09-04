@@ -920,7 +920,8 @@ Function Get-XisfLightFrames{
         [Parameter()][Switch]$UseErrorCache,
         [Parameter()][Switch]$SkipOnError,
         [Parameter()][string[]]$PathTokensToIgnore,
-        [Parameter()][Switch]$ShowProgress
+        [Parameter()][Switch]$ShowProgress,
+        [Parameter()][Switch]$TruncateFilterBandpass
     )
     begin
     {        
@@ -952,7 +953,7 @@ Function Get-XisfLightFrames{
         foreach-object {
             $file=$_
             try{
-                $file|Get-XisfFitsStats -Cache:$cache -ErrorCache:$errorCache |where-object ImageType -eq "LIGHT"
+                $file|Get-XisfFitsStats -Cache:$cache -ErrorCache:$errorCache -TruncateFilterBandpass:$TruncateFilterBandpass |where-object ImageType -eq "LIGHT"
             }
             catch{
                 if(-not ($SkipOnError.IsPresent)){
@@ -983,6 +984,7 @@ Function Get-XisfLightFrames{
                         -UseErrorCache:$UseErrorCache `
                         -SkipOnError:$SkipOnError `
                         -PathTokensToIgnore:$PathTokensToIgnore `
+                        -TruncateFilterBandpass:$TruncateFilterBandpass `
                         -ShowProgress:$ShowProgress
                     $i+=1
                     if($i -eq $maxi){

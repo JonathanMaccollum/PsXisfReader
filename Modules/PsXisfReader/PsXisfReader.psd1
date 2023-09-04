@@ -8,7 +8,7 @@
 
 @{
     RootModule="PixInsightPreProcessing.psm1"
-ModuleVersion = '1.0.50'
+ModuleVersion = '1.0.51'
 GUID = '67d4833d-8c25-489b-893e-58f62eb0057b'
 Author = 'Jonathan W. MacCollum'
 Copyright = '(c) Jonathan W. MacCollum. All rights reserved.'
