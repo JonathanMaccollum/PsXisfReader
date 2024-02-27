@@ -21,14 +21,26 @@ Invoke-DarkFrameSorting `
 $PushToLightBucket=$true
 $BiasLibraryFiles=Get-MasterBiasLibrary `
     -Path "E:\Astrophotography\BiasLibrary\QHY268M" `
-    -Pattern "^(?<date>\d+).MasterBias.Gain.(?<gain>\d+).Offset.(?<offset>\d+).(?<numberOfExposures>\d+)x(?<exposure>\d+\.?\d*)s.xisf$" |
+    -Pattern "^(?<date>\d+).MasterBias.Gain.(?<gain>\d+).Offset.(?<offset>\d+).2CMS-1.USB33.(?<numberOfExposures>\d+)x(?<exposure>\d+\.?\d*)s.xisf$" ||
     where-object Geometry -eq "6252:4176:1" |
-    where-object ObsDateMinus12hr -gt "2023-02-05"
+    where-object ObsDateMinus12hr -gt "2023-03-22" |
+    group-object Gain,Offset |
+    foreach-object {
+        $_.Group | sort-object NumberOfExposures -Descending | Select-Object -First 1
+    }
+
+$BiasLibraryFiles|format-table UsbLimit,numberOfExposures,Instrument,Gain,Offset,ReadoutMode
+
 $DarkLibraryFiles=Get-MasterDarkLibrary `
     -Path "E:\Astrophotography\DarkLibrary\QHY268M" `
     -Pattern "^(?<date>\d+).MasterDark.Gain.(?<gain>\d+).Offset.(?<offset>\d+).(?<temp>-?\d+)C.(?<numberOfExposures>\d+)x(?<exposure>\d+)s.xisf$" |
     where-object Geometry -eq "6252:4176:1" |
-    where-object ObsDateMinus12hr -gt "2023-02-05"
+    where-object ObsDateMinus12hr -gt "2023-03-22" |
+    group-object Instrument,Gain,Offset,SetTemp,Exposure |
+    foreach-object {
+        $_.Group | sort-object NumberOfExposures -Descending | select-object -First 1
+    }
+$DarkLibraryFiles | sort-object Gain,Offset,SetTemp,Exposure|format-table Instrument,Exposure,Gain,Offset,SetTemp,NumberOfExposures,Path
 $DarkLibrary=($DarkLibraryFiles|group-object Instrument,Gain,Offset,Exposure,SetTemp|foreach-object {
     $instrument=$_.Group[0].Instrument
     $gain=$_.Group[0].Gain
@@ -47,13 +59,14 @@ $DarkLibrary=($DarkLibraryFiles|group-object Instrument,Gain,Offset,Exposure,Set
     }
 })
 
-<#
+#restack data from 12-30 and newer
+
 Invoke-FlatFrameSorting `
     -DropoffLocation $DropoffLocation `
     -ArchiveDirectory $ArchiveDirectory `
     -CalibratedFlatsOutput "E:\Calibrated\CalibratedFlats" `
-    -PixInsightSlot 201 -UseBias -BiasLibraryFiles $BiasLibraryFiles -KeepOpen
-#>
+    -PixInsightSlot 201 -UseBias -BiasLibraryFiles $BiasLibraryFiles #-KeepOpen 
+#exit
 #Install-module ResizeImageModule
 Import-Module ResizeImageModule
 Import-module "C:\Program Files\N.I.N.A. - Nighttime Imaging 'N' Astronomy\NINA.Astrometry.dll"
@@ -123,23 +136,16 @@ Function Update-LightBucketWithNewImageCaptured
 }
 
 while($true){
-
     Get-ChildItem $DropoffLocation *.xisf -ErrorAction Continue |
         foreach-object { try{ $_ | Get-XisfFitsStats -ErrorAction Continue}catch{} }|
-        where-object Instrument -eq "QHY268m" |
+        where-object Instrument -eq "QHY268M" |
         where-object ImageType -eq "LIGHT" |
         where-object FocalLength -eq "950" |
         where-object Geometry -eq "6252:4176:1" |
-        where-object ReadoutMode -in @("Extend Fullwell 2CMS","High Gain Mode") |
-        #where-object ReadoutMode -eq "High Gain Mode" |
-        #where-object {$_.Object.StartsWith("C-2022 E3 (ZTF)")} |
-        #where-object {$_.Object.StartsWith("Sh2-261 - Lowers Nebula")} |
-        #where-object Exposure -eq 10 |
-        #where-object Offset -eq 65 |
-        #where-object Object -eq "T Coronae Borealis" |
-        #where-object Filter -eq "L" |
-        #where-object Filter -eq "Ha6nmMaxFR" |
-        #select-object -first 30 |
+        where-object ReadoutMode -in @("High Gain 2CMS") |
+        #where-object Object -ne "M 33" |
+        #where-object ObsDateMinus12hr -le "2024-01-29" |
+        #where-object Filter -eq "B" |
         group-object Instrument,SetTemp,Gain,Offset,Exposure |
         foreach-object {
             $lights = $_.Group
@@ -170,7 +176,7 @@ while($true){
                 ($dark.Gain-eq $gain) -and
                 ($dark.Offset-eq $offset) -and
                 ($dark.Exposure-eq $exposure) -and
-                ([Math]::abs($dark.SetTemp - $ccdTemp) -lt 11)
+                ([Math]::abs($dark.SetTemp - $ccdTemp) -lt 5)
             } | select-object -first 1
 
             if(-not $masterDark){
@@ -181,17 +187,19 @@ while($true){
                         ($dark.Gain-eq $gain) -and
                         ($dark.Offset-eq $offset) -and
                         ($dark.Exposure-eq $exposure) -and
-                        ([Math]::abs($dark.SetTemp - $ccdTemp) -lt 7)
+                        ([Math]::abs($dark.SetTemp - $ccdTemp) -lt 9)
                     } | select-object -first 1
                     if($masterDark){
-                        Write-Warning "No master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp. Attempting to scale temperature."
+                        Write-Warning "No master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp. Scaling dark."
                     }
                     else{
                         Write-Warning "No master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp. Using bias only."
+                        #return
                     }
                 }
                 else{
-                    Write-Warning "No master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp. Using bias only."
+                    Write-Warning "No master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp. Skipping."
+                    return 
                 }
             }
             $lights |
@@ -200,14 +208,7 @@ while($true){
                     $filter = $_.Group[0].Filter
                     $focalLength=$_.Group[0].FocalLength
 
-                    
-                    # if($filter -in @('L','R','G','B')){
-                    #     $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20230420.MasterFlatCal.$($filter).xisf" #45 deg
-                    # }
-                    # else{
-                    #     $masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20230213.MasterFlatCal.$($filter).xisf"
-                    # }
-                    $masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20230422.MasterFlatCal.$($filter).xisf"
+                    $masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20240214.MasterFlatCal.$($filter).xisf"
 
                     if($masterFlat -and (-not (test-path $masterFlat))) {
                         Write-Warning "Skipping $($_.Group.Count) frames at ($focalLength)mm with filter $filter. Reason: No master flat was found."
@@ -258,12 +259,8 @@ while($true){
                                                 [System.IO.Directory]::CreateDirectory($ThumbnailFolder) >> $null
                                                 $ThumbnailFile = Join-Path $ThumbnailFolder ($fileName+".jpeg")
                                                 $ThumbnailSmall = Join-Path $ThumbnailFolder ($fileName+".small.jpeg")
-                                                if(-not (test-path $ThumbnailSmall)){
-                                                    if(-not (test-path $ThumbnailFile)){
-                                                        ConvertTo-XisfStfThumbnail -Path $calibrated -OutputPath $ThumbnailFile -PixInsightSlot 201
-                                                    }                                                    
-                                                    Resize-Image -InputFile $ThumbnailFile -OutputFile $ThumbnailSmall -Width 300 -ProportionalResize $true -Height 300
-                                                }
+                                                ConvertTo-XisfStfThumbnail -Path $calibrated -OutputPath $ThumbnailFile -PixInsightSlot 201
+                                                Resize-Image -InputFile $ThumbnailFile -OutputFile $ThumbnailSmall -Width 300 -ProportionalResize $true -Height 300
                                                 $ThumbnailData = Get-Content $ThumbnailSmall -AsByteStream
                                             }
                                             catch{
@@ -274,7 +271,12 @@ while($true){
                                             Update-LightBucketWithNewImageCaptured -LightFrame ($LightFrame.Path) -ThumbnailData $ThumbnailData
                                         }
                                         catch {
-                                            write-warning $_.Exception.ToString()
+                                            if($_.scriptstacktrace){
+                                                write-warning $_.scriptstacktrace
+                                            }
+                                            if($_.Exception){
+                                                write-warning $_.Exception.ToString()
+                                            }                                            
                                             throw
                                         }
                                     }
@@ -284,5 +286,5 @@ while($true){
             }
         }
     write-host "waiting for next set of data..."
-    Wait-Event -Timeout 2
+    Wait-Event -Timeout 60
 }

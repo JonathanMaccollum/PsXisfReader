@@ -11,7 +11,7 @@ Invoke-BiasFrameSorting `
     -DropoffLocation $DropoffLocation `
     -ArchiveDirectory $ArchiveDirectory `
     -PixInsightSlot 201 `
-    -Verbose 
+    -Verbose -KeepOpen
 Invoke-DarkFrameSorting `
     -DropoffLocation $DropoffLocation `
     -ArchiveDirectory $ArchiveDirectory `
@@ -25,7 +25,7 @@ Invoke-FlatFrameSorting `
     -DropoffLocation $DropoffLocation `
     -ArchiveDirectory $ArchiveDirectory `
     -CalibratedFlatsOutput "E:\Calibrated\CalibratedFlats" `
-    -PixInsightSlot 201
+    -PixInsightSlot 201 -WhenNoMatchingDarkFlatPresentUseMostRecentDarkFlat
 
 exit
 #>
@@ -53,7 +53,7 @@ $DarkLibraryFiles=Get-MasterDarkLibrary `
     foreach-object {
         $_.Group | sort-object NumberOfExposures -Descending | select-object -First 1
     }
-$DarkLibraryFiles | format-table Instrument,Exposure,Gain,Offset,SetTemp,NumberOfExposures,Path
+$DarkLibraryFiles | sort-object Gain,Offset,SetTemp,Exposure|format-table Instrument,Exposure,Gain,Offset,SetTemp,NumberOfExposures,Path
 $DarkLibrary=($DarkLibraryFiles|group-object Instrument,Gain,Offset,Exposure,SetTemp|foreach-object {
     $instrument=$_.Group[0].Instrument
     $gain=$_.Group[0].Gain
@@ -77,7 +77,7 @@ Invoke-FlatFrameSorting `
     -DropoffLocation $DropoffLocation `
     -ArchiveDirectory $ArchiveDirectory `
     -CalibratedFlatsOutput "E:\Calibrated\CalibratedFlats" `
-    -PixInsightSlot 201 -UseBias -BiasLibraryFiles $BiasLibraryFiles -KeepOpen 
+    -PixInsightSlot 201 -UseBias -BiasLibraryFiles $BiasLibraryFiles #-KeepOpen 
 #>
 #Install-module ResizeImageModule
 Import-Module ResizeImageModule
@@ -148,32 +148,34 @@ Function Update-LightBucketWithNewImageCaptured
 }
 
 while($true){
-
     Get-ChildItem $DropoffLocation *.xisf -ErrorAction Continue |
-        foreach-object { try{ $_ | Get-XisfFitsStats -ErrorAction Continue}catch{} }|
+        foreach-object { try{ $_ | Get-XisfFitsStats -ErrorAction Continue -TruncateFilterBandpass:$false}catch{} }|
         where-object Instrument -eq "QHY268M" |
         where-object ImageType -eq "LIGHT" |
+        where-object Telescope -eq "Meade Series 6000 APO 70mm Quad" |
         where-object FocalLength -eq "350" |
-        #where-object Exposure -eq "180" |
+        #where-object Object -eq "NGC 1333 Region" |
+        #where-object FilterWheel -ne "Manual filter wheel" |
         where-object Geometry -eq "6252:4176:1" |
-        #where-object Object -eq "M 101" |        
         where-object ReadoutMode -in @("2CMS-1") |
         group-object Instrument,SetTemp,Gain,Offset,Exposure |
         foreach-object {
             $lights = $_.Group
-            $exposure=$lights[0].Exposure
-            $gain=$lights[0].Gain
-            $offset = $lights[0].Offset
-            $setTemp = $lights[0].SetTemp
-            $instrument=$lights[0].Instrument
+            $x=$lights[0]
 
+            $instrument=$x.Instrument
+            $gain=[decimal]$x.Gain
+            $offset=[decimal]$x.Offset
+            $exposure=[decimal]$x.Exposure
+            $ccdTemp = [decimal]$x.CCDTemp
+            $setTemp=[decimal]$x.SetTemp
             $lights |
                 group-object Filter,FocalLength |
                 foreach-object {
                     $filter = $_.Group[0].Filter
                     $focalLength=$_.Group[0].FocalLength
 
-                    $masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20230504.MasterFlatCal.$filter.xisf"
+                    $masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20231018.MasterFlatCal.$filter.xisf"
                     if($masterFlat -and (-not (test-path $masterFlat))) {
                         Write-Warning "Skipping $($_.Group.Count) frames at ($focalLength)mm with filter $filter. Reason: No master flat was found."
                     }
@@ -199,14 +201,14 @@ while($true){
                             ($dark.Gain-eq $gain) -and
                             ($dark.Offset-eq $offset) -and
                             ($dark.Exposure-eq $exposure) -and
-                            ([Math]::abs($dark.SetTemp - $setTemp) -lt 4)
+                            ([Math]::abs($dark.SetTemp - $setTemp) -lt 7)
                         } | select-object -first 1
 
                         if($masterDark){
-                            write-host "Master dark available for $instrument at Gain=$gain Offset=$offset temp $setTemp. $($masterDark.Path.Name)"
+                            write-host "Master dark available for $instrument at Gain=$gain Offset=$offset temp $setTemp exposure $exposure. $($masterDark.Path.Name)"
                         }
                         else{
-                            Write-Warning "No master dark available for $instrument at Gain=$gain Offset=$offset temp $setTemp."
+                            Write-Warning "No master dark available for $instrument at Gain=$gain Offset=$offset temp $setTemp exposure $exposure."
                             return
                         }
 
@@ -237,7 +239,7 @@ while($true){
                             -OutputPath $CalibratedOutput `
                             -PixInsightSlot 201 `
                             -OutputPedestal 80 `
-                            -Verbose `
+                            -Verbose  `
                             -AfterImagesCalibrated {
                                 param($LightFrames)
                                

@@ -128,7 +128,7 @@ Function Get-XisfFitsStats
             if($result.Object -and $result.Object.Contains("/")){
                 $result.Object = $result.Object.Replace("/","-")
             }
-            Write-Output ([XisfFileStats]@{
+            $result = ([XisfFileStats]@{
                 Exposure=$result.Exposure
                 Filter=$result.Filter
                 Instrument=$result.Instrument
@@ -162,6 +162,7 @@ Function Get-XisfFitsStats
         }
         elseif($ErrorCache -and $ErrorCache.ContainsKey($Path.FullName)){
             Write-Verbose "Skipping file $($Path.FullName) due to previously encountered error."
+            $result=$null
         }
         else
         {
@@ -172,10 +173,6 @@ Function Get-XisfFitsStats
                 $geometry = $header.xisf.Image.geometry
                 $fits = $header.xisf.Image.FITSKeyword
                 $filter = $fits.Where({$_.Name -eq 'FILTER'}).value
-                if($filter -and $TruncateFilterBandpass)
-                {
-                    $filter = $filter.Replace('5nm','').Replace('3nm','')
-                }
                 if($filter){
                     $filter = $filter.Replace("'","")
                 }
@@ -187,7 +184,6 @@ Function Get-XisfFitsStats
                             ([DateTime]($_.Trim("'"))).AddHours(-12).Date
                         }
                 }
-
                 $results=@{
                     Exposure=$fits.Where{$_.Name -eq 'EXPOSURE'}.value
                     Filter=$filter
@@ -242,10 +238,14 @@ Function Get-XisfFitsStats
                 }
                 throw
             }
+        }
 
-            if($result){
-                Write-Output $result
-            }
+        if($result -and $result.Filter -and $TruncateFilterBandpass)
+        {
+            $result.Filter = $result.Filter.Replace('5nm','').Replace('3nm','').Replace('6nm','').Replace("MaxFR",'')
+        }
+        if($result){
+            Write-Output $result
         }
     }
 }

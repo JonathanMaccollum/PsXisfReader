@@ -25,8 +25,24 @@ $targets = @(
      #"E:\Astrophotography\950mm\NGC 3344 Take 2"
      #"E:\Astrophotography\950mm\M51"
      #"E:\Astrophotography\950mm\NGC 3628 - Hamburger Galaxy"
-     "E:\Astrophotography\950mm\Dolphin Nebula in Cygnus"
-     "E:\Astrophotography\950mm\M106 Take 3"
+     #"E:\Astrophotography\950mm\Dolphin Nebula in Cygnus"
+     #"E:\Astrophotography\950mm\M106 Take 3"
+     #"E:\Astrophotography\950mm\Sadr Take 3h"
+     #"E:\Astrophotography\950mm\Bubble Nebula"
+     #"E:\Astrophotography\950mm\vdB 15"
+     #"E:\Astrophotography\950mm\LDN 1235 - Dark Shark Nebula Take 2"
+     #"E:\Astrophotography\950mm\vdB 10"
+     #"E:\Astrophotography\950mm\Flaming Star Nebula"
+     #"E:\Astrophotography\950mm\IC410 - Tadpoles"
+     #"E:\Astrophotography\950mm\M 33"
+     #"E:\Astrophotography\950mm\vdb 13 and LDN 1448 and LDN 1451"
+     #"E:\Astrophotography\950mm\M81 and M82"
+     #"E:\Astrophotography\950mm\Barnard 3 and 4"
+     #"E:\Astrophotography\950mm\Cone and Fox Fur"
+     #"E:\Astrophotography\950mm\Ursa Major on HD 83489"
+     #"E:\Astrophotography\950mm\M63 Take 2"
+     #"E:\Astrophotography\950mm\PK 164 31.1"
+     "E:\Astrophotography\950mm\NGC 2633 and NGC 2634"
 )
 $referenceImages = @(
     "M45 Take 2.L.31x90s.PSFSW.ESD.xisf"
@@ -42,7 +58,19 @@ $referenceImages = @(
     "NGC 3628 - Hamburger Galaxy.L.38x360s.ESD.LSPR.xisf"
     "Dolphin Nebula in Cygnus.Ha.19x360s.ESD.xisf"
     "M106 Take 3.L.36x180s.ESD.LSPR.xisf"
+    "Sadr Take 3g.L.57x30s.ESD.LSPR.xisf"
+    "Bubble Nebula.L.22x180s.ESD.xisf"
+    "vdB 15.L.95x30s.L.43x180s.ESD.xisf"
+    "LDN 1235 - Dark Shark Nebula Take 2.L.89x180s.ESD.LSPR.LN.xisf"
+    "M 33.B.24x180s.ESD.LSPR.xisf"
+    "Flaming Star Nebula.L.65x180s.ESD.xisf"
+    "M81 and M82.L.120x180s.ESD.xisf"
+    "_Barnard 3 and 4.L.128x180s.L.27x360s.ESD.NewFlats.xisf"
+    "Cone and Fox Fur.Ha3nm.16x360s.ESD.xisf"
+    "PK 164 31.1.Ha3nm.155x360s.ESD.LSPR.LN.xisf"
 )
+
+
 
 $targets | foreach-object {
     $target = $_
@@ -64,22 +92,31 @@ $targets | foreach-object {
     
 
     $rawSubs = 
-        Get-XisfLightFrames -Path $target -Recurse -UseCache -SkipOnError |
+        Get-XisfLightFrames -Path $target -Recurse -UseCache -SkipOnError -TruncateFilterBandpass:$false |
         where-object Instrument -eq "QHY268M" |
-        Where-Object {-not $_.HasTokensInPath(@("reject","process","planning","testing","clouds","draft","cloudy","_ez_LS_","drizzle","quick"))} |
+        Where-Object {-not $_.HasTokensInPath(@("reject","process","planning","testing","clouds","draft","cloudy","_ez_LS_","drizzle","quick","abandoned"))} |
         #Where-Object Filter -In @("Ha") |
         #Where-Object {-not $_.Filter.Contains("Oiii")} |
         #Where-Object Exposure -eq 10 |
         #Where-Object FocalRatio -eq "5.6" |
-        #Where-Object Filter -eq "L" |
-        #Where-Object Filter -ne "R" |
+        #Where-Object Filter -ne "Oiii" |
+        #Where-Object Filter -eq "R" |
+        #Where-Object Exposure -eq 180 |
         #Where-Object Filter -ne "G" |
         #Where-Object Filter -ne "B" |
         #Where-object ObsDateMinus12hr -eq ([DateTime]"2022-11-09")
         Where-Object {-not $_.IsIntegratedFile()} #|
         #select-object -First 30
     #$rawSubs|Format-Table Path,*
+    $rawSubs | Group-Object {[decimal]::Round($_.Rotator,1,([System.MidpointRounding]::AwayFromZero))} | sort-object Count
 
+    <#
+    Get-XisfFile -Path  D:\Backups\Camera\Dropoff\NINA |
+        where-object ImageType -eq "FLAT" |
+        Group-Object {[decimal]::Round($_.Rotator,1,([System.MidpointRounding]::AwayFromZero))} | sort-object Count
+        #>
+
+    #return
     $uncalibrated = 
         $rawSubs |
         Get-XisfCalibrationState `
@@ -119,16 +156,21 @@ $targets | foreach-object {
         -SkipCosmeticCorrection:$false `
         -RerunWeighting:$false `
         -SkipWeighting:$false `
-        -PSFSignalWeightWeighting `
+        -PSFSignalWeightWeighting:$true `
         -RerunAlignment:$false `
         -IntegratedImageOutputDirectory $target `
         -AlignmentReference $alignmentReference `
         -GenerateDrizzleData `
-        -ApprovalExpression "Median<42 && FWHM<5.5 && Stars > 400" `
-        -WeightingExpression "PSFSignalWeight" `
-        -Rejection "Rejection_ESD" `
+        -ApprovalExpression "Median<42 && FWHM<5.5 && Stars > 2200" `
+        -WeightingExpression "(15*(1-(FWHM-FWHMMin)/(FWHMMax-FWHMMin))
+        +  5*(1-(Eccentricity-EccentricityMin)/(EccentricityMax-EccentricityMin))
+        + 15*(SNRWeight-SNRWeightMin)/(SNRWeightMax-SNRWeightMin)
+        + 30*(1-(Median-MedianMin)/(MedianMax-MedianMin))
+        + 20*(Stars-StarsMin)/(StarsMax-StarsMin))
+        + 20" `
+        -Rejection "LinearFit" `
         -GenerateThumbnail `
-        -Verbose #-KeepOpen
+        -Verbose -HotAutoSigma 4.0 #-KeepOpen 
     if($data){
 
         $stacked = $data | where-object {$_.Aligned -and (Test-Path $_.Aligned)}

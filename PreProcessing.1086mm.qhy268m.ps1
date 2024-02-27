@@ -4,18 +4,43 @@ $ErrorActionPreference="STOP"
 $WarningPreference="Continue"
 $DropoffLocation = "D:\Backups\Camera\Dropoff\NINA"
 $ArchiveDirectory="E:\Astrophotography"
-$CalibratedOutput = "E:\Calibrated\1000mm"
+$CalibratedOutput = "E:\Calibrated\1086mm"
+<#
+Invoke-BiasFrameSorting `
+    -DropoffLocation $DropoffLocation `
+    -ArchiveDirectory $ArchiveDirectory `
+    -PixInsightSlot 201 -KeepOpen
+Invoke-DarkFrameSorting `
+    -DropoffLocation $DropoffLocation `
+    -ArchiveDirectory $ArchiveDirectory `
+    -PixInsightSlot 201 -KeepOpen
+    #>
+<#
+    #>
 
-
-$PushToLightBucket=$false
+$PushToLightBucket=$true
 $BiasLibraryFiles=Get-MasterBiasLibrary `
-    -Path "E:\Astrophotography\BiasLibrary\QHY600M" `
-    -Pattern "^(?<date>\d+).MasterBias.Gain.(?<gain>\d+).Offset.(?<offset>\d+).(?<numberOfExposures>\d+)x(?<exposure>\d+\.?\d*)s.xisf$" |
-    where-object Geometry -eq "9576:6388:1"
+    -Path "E:\Astrophotography\BiasLibrary\QHY268M" `
+    -Pattern "^(?<date>\d+).MasterBias.Gain.(?<gain>\d+).Offset.(?<offset>\d+).2CMS-1.USB33.(?<numberOfExposures>\d+)x(?<exposure>\d+\.?\d*)s.xisf$" ||
+    where-object Geometry -eq "6252:4176:1" |
+    where-object ObsDateMinus12hr -gt "2023-03-22" |
+    group-object Gain,Offset |
+    foreach-object {
+        $_.Group | sort-object NumberOfExposures -Descending | Select-Object -First 1
+    }
+
+$BiasLibraryFiles|format-table UsbLimit,numberOfExposures,Instrument,Gain,Offset,ReadoutMode
+
 $DarkLibraryFiles=Get-MasterDarkLibrary `
-    -Path "E:\Astrophotography\DarkLibrary\QHY600M" `
+    -Path "E:\Astrophotography\DarkLibrary\QHY268M" `
     -Pattern "^(?<date>\d+).MasterDark.Gain.(?<gain>\d+).Offset.(?<offset>\d+).(?<temp>-?\d+)C.(?<numberOfExposures>\d+)x(?<exposure>\d+)s.xisf$" |
-    where-object Geometry -eq "9576:6388:1"
+    where-object Geometry -eq "6252:4176:1" |
+    where-object ObsDateMinus12hr -gt "2023-03-22" |
+    group-object Instrument,Gain,Offset,SetTemp,Exposure |
+    foreach-object {
+        $_.Group | sort-object NumberOfExposures -Descending | select-object -First 1
+    }
+$DarkLibraryFiles | sort-object Gain,Offset,SetTemp,Exposure|format-table Instrument,Exposure,Gain,Offset,SetTemp,NumberOfExposures,Path
 $DarkLibrary=($DarkLibraryFiles|group-object Instrument,Gain,Offset,Exposure,SetTemp|foreach-object {
     $instrument=$_.Group[0].Instrument
     $gain=$_.Group[0].Gain
@@ -41,7 +66,6 @@ Invoke-FlatFrameSorting `
     -CalibratedFlatsOutput "E:\Calibrated\CalibratedFlats" `
     -PixInsightSlot 201 -UseBias -BiasLibraryFiles $BiasLibraryFiles #-KeepOpen 
 #>
-
 #Install-module ResizeImageModule
 Import-Module ResizeImageModule
 Import-module "C:\Program Files\N.I.N.A. - Nighttime Imaging 'N' Astronomy\NINA.Astrometry.dll"
@@ -111,19 +135,15 @@ Function Update-LightBucketWithNewImageCaptured
 }
 
 while($true){
-
     Get-ChildItem $DropoffLocation *.xisf -ErrorAction Continue |
         foreach-object { try{ $_ | Get-XisfFitsStats -ErrorAction Continue}catch{} }|
-        where-object Instrument -eq "QHY600m" |
+        where-object Instrument -eq "QHY268M" |
         where-object ImageType -eq "LIGHT" |
-        where-object FocalLength -eq "1000" |
-        where-object Geometry -eq "9576:6388:1" |
-        #where-object Exposure -eq 10 |
-        #where-object Offset -eq 65 |
-        #where-object Object -eq "sh2-140 Take 2" |
-        #where-object Filter -eq "Ha" |
-        #where-object Filter -eq "Ha6nmMaxFR" |
-        #select-object -first 1 |
+        where-object FocalLength -eq "1086" |
+        where-object Geometry -eq "6252:4176:1" |
+        where-object ReadoutMode -in @("High Gain 2CMS") |
+        where-object Object -eq "Seagull Bow Shock" |
+        #where-object Filter -eq "L" |
         group-object Instrument,SetTemp,Gain,Offset,Exposure |
         foreach-object {
             $lights = $_.Group
@@ -154,7 +174,7 @@ while($true){
                 ($dark.Gain-eq $gain) -and
                 ($dark.Offset-eq $offset) -and
                 ($dark.Exposure-eq $exposure) -and
-                ([Math]::abs($dark.SetTemp - $ccdTemp) -lt 3)
+                ([Math]::abs($dark.SetTemp - $ccdTemp) -lt 4)
             } | select-object -first 1
 
             if(-not $masterDark){
@@ -165,14 +185,14 @@ while($true){
                         ($dark.Gain-eq $gain) -and
                         ($dark.Offset-eq $offset) -and
                         ($dark.Exposure-eq $exposure) -and
-                        ([Math]::abs($dark.SetTemp - $ccdTemp) -lt 8)
+                        ([Math]::abs($dark.SetTemp - $ccdTemp) -lt 7)
                     } | select-object -first 1
                     if($masterDark){
                         Write-Warning "No master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp. Scaling dark."
                     }
                     else{
-                        Write-Warning "No master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp. Skipping."
-                        return 
+                        Write-Warning "No master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp. Using bias only."
+                        #return
                     }
                 }
                 else{
@@ -186,7 +206,7 @@ while($true){
                     $filter = $_.Group[0].Filter
                     $focalLength=$_.Group[0].FocalLength
 
-                    $masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20231005.MasterFlatCal.$($filter).xisf"
+                    $masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20231123.MasterFlatCal.$($filter).xisf"
 
                     if($masterFlat -and (-not (test-path $masterFlat))) {
                         Write-Warning "Skipping $($_.Group.Count) frames at ($focalLength)mm with filter $filter. Reason: No master flat was found."

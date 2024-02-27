@@ -1192,12 +1192,13 @@ Function Invoke-LightFrameSorting
         [Parameter(Mandatory=$false)][ScriptBlock]$AfterImagesCalibrated,
 
         [Parameter(Mandatory=$false)][Switch]$EnableCFA,
-        [Parameter(Mandatory=$false)][Switch]$DoNotArchive
+        [Parameter(Mandatory=$false)][Switch]$DoNotArchive,
+        [Parameter(Mandatory=$false)][Switch]$TruncateFilterBandpass
     )
     if($null -eq $XisfStats)
     {
         $XisfStats = Get-ChildItem $DropoffLocation "*.xisf" -File |
-            Get-XisfFitsStats |
+            Get-XisfFitsStats -TruncateFilterBandpass:$TruncateFilterBandpass |
             where-object ImageType -eq "Light" |
             where-object SetTemp -eq $SetTemp |
             where-object Filter -eq $Filter |
@@ -1390,25 +1391,28 @@ P.structureLayers = $DetectionScales;
 P.noiseLayers = 0;
 P.hotPixelFilterRadius = 1;
 P.noiseReductionFilterRadius = 0;
-P.sensitivity = 0.100;
-P.peakResponse = 0.80;
-P.maxStarDistortion = 0.500;
+P.minStructureSize = 0;
+P.sensitivity = 0.50;
+P.peakResponse = 0.50;
+P.brightThreshold = 3.00;
+P.maxStarDistortion = 0.60;
+P.allowClusteredSources = false;
+P.localMaximaDetectionLimit = 0.75;
 P.upperLimit = 1.000;
 P.invert = false;
 P.distortionModel = `"`";
 P.undistortedReference = false;
-P.distortionCorrection = true;
+P.rigidTransformations = false;
+P.distortionCorrection = false;
 P.distortionMaxIterations = 20;
-P.distortionTolerance = 0.005;
-P.distortionAmplitude = 2;
-P.localDistortion = true;
-P.localDistortionScale = 256;
-P.localDistortionTolerance = 0.050;
-P.localDistortionRejection = 2.50;
-P.localDistortionRejectionWindow = 64;
-P.localDistortionRegularization = 0.010;
+P.distortionMatcherExpansion = 1.00;
+P.splineOrder = 2;
+P.splineSmoothness = 0.005;
+P.splineOutlierDetectionRadius = 160;
+P.splineOutlierDetectionMinThreshold = 4.0;
+P.splineOutlierDetectionSigma = 5.0;
 P.matcherTolerance = 0.0500;
-P.ransacTolerance = 2.00;
+P.ransacTolerance = 1.9000;
 P.ransacMaxIterations = 2000;
 P.ransacMaximizeInliers = 1.00;
 P.ransacMaximizeOverlapping = 1.00;
@@ -1434,16 +1438,12 @@ P.writeKeywords = true;
 P.generateMasks = false;
 P.generateDrizzleData = true;
 P.generateDistortionMaps = false;
-P.inheritAstrometricSolution = true;
+P.inheritAstrometricSolution = false;
 P.frameAdaptation = false;
 P.randomizeMosaic = false;
 P.noGUIMessages = true;
-P.useSurfaceSplines = false;
-P.extrapolateLocalDistortion = true;
-P.splineSmoothness = 0.250;
 P.pixelInterpolation = StarAlignment.prototype.$($Interpolation);
 P.clampingThreshold = $ClampingThreshold;
-P.outputDirectory = `"S:/PixInsight/Aligned`";
 P.outputExtension = `".xisf`";
 P.outputPrefix = `"`";
 P.outputPostfix = `"_r`";
@@ -1453,11 +1453,13 @@ P.outputSampleFormat = StarAlignment.prototype.SameAsTarget;
 P.overwriteExistingFiles = false;
 P.onError = StarAlignment.prototype.Continue;
 P.useFileThreads = true;
-P.fileThreadOverload = 1.20;
-P.maxFileReadThreads = 1;
-P.maxFileWriteThreads = 1;
+P.fileThreadOverload = 1.00;
+P.maxFileReadThreads = 0;
+P.maxFileWriteThreads = 0;
 P.outputDirectory = `"$outputDirectory`";
 P.targets= [`r`n     $ImageDefinition`r`n   ];
+P.memoryLoadControl = true;
+P.memoryLoadLimit = 0.85;
 P.launch();
 P.executeGlobal();"
     $executionScript = New-TemporaryFile
@@ -2466,6 +2468,7 @@ Function Invoke-XisfPostCalibrationMonochromeImageWorkflow
         [Parameter(Mandatory=$false)][string]$Rejection = "LinearFit", #Rejection_ESD
         [Parameter(Mandatory=$false)][string]$Normalization = "AdditiveWithScaling", #AdaptiveNormalization
         [Parameter(Mandatory=$false)][string]$RejectionNormalization = "Scale", #AdaptiveRejectionNormalization
+        [Parameter(Mandatory=$false)][decimal]$HotAutoSigma=40,
         [Switch]$KeepOpen
     )
     $OutputFileSuffixWithExtension =""
@@ -2570,7 +2573,7 @@ Function Invoke-XisfPostCalibrationMonochromeImageWorkflow
                     Invoke-PiCosmeticCorrection `
                         -Images ($images.Calibrated) `
                         -UseAutoHot:$true `
-                        -HotAutoSigma 40 `
+                        -HotAutoSigma 4.0 `
                         -HotDarkLevel 0.4 `
                         -MasterDark $masterDark `
                         -ColdAutoSigma 2.4 `

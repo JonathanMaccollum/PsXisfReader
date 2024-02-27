@@ -15,13 +15,6 @@ Invoke-DarkFrameSorting `
     -ArchiveDirectory $ArchiveDirectory `
     -PixInsightSlot 201 -KeepOpen
     #>
-<#
-Invoke-FlatFrameSorting `
-    -DropoffLocation $DropoffLocation `
-    -ArchiveDirectory $ArchiveDirectory `
-    -CalibratedFlatsOutput "M:\PixInsightLT\CalibratedFlats" `
-    -PixInsightSlot 201 -WhenNoMatchingDarkFlatPresentUseMostRecentDarkFlat
-    #>
 
 $PushToLightBucket=$true
 $BiasLibraryFiles=Get-MasterBiasLibrary `
@@ -55,7 +48,7 @@ Invoke-FlatFrameSorting `
     -DropoffLocation $DropoffLocation `
     -ArchiveDirectory $ArchiveDirectory `
     -CalibratedFlatsOutput "E:\Calibrated\CalibratedFlats" `
-    -PixInsightSlot 201 -UseBias -BiasLibraryFiles $BiasLibraryFiles -KeepOpen 
+    -PixInsightSlot 201 -UseBias -BiasLibraryFiles $BiasLibraryFiles #-KeepOpen 
 #>
 
 #Install-module ResizeImageModule
@@ -127,7 +120,6 @@ Function Update-LightBucketWithNewImageCaptured
 }
 
 while($true){
-
     Get-ChildItem $DropoffLocation *.xisf -ErrorAction Continue |
         foreach-object { try{ $_ | Get-XisfFitsStats -ErrorAction Continue}catch{} }|
         where-object Instrument -eq "QHY600m" |
@@ -136,7 +128,7 @@ while($true){
         where-object Geometry -eq "9576:6388:1" |
         #where-object Exposure -eq 10 |
         #where-object Offset -eq 65 |
-        #where-object Object -eq "C2022 E3 ZTF Night7" |
+        #where-object Object -eq "Sadr Take 3f" |
         #where-object Filter -eq "Ha" |
         #where-object Filter -eq "Ha6nmMaxFR" |
         #select-object -first 1 |
@@ -170,7 +162,7 @@ while($true){
                 ($dark.Gain-eq $gain) -and
                 ($dark.Offset-eq $offset) -and
                 ($dark.Exposure-eq $exposure) -and
-                ([Math]::abs($dark.SetTemp - $ccdTemp) -lt 3)
+                ([Math]::abs($dark.SetTemp - $ccdTemp) -lt 4)
             } | select-object -first 1
 
             if(-not $masterDark){
@@ -181,19 +173,18 @@ while($true){
                         ($dark.Gain-eq $gain) -and
                         ($dark.Offset-eq $offset) -and
                         ($dark.Exposure-eq $exposure) -and
-                        ([Math]::abs($dark.SetTemp - $ccdTemp) -lt 7)
+                        ([Math]::abs($dark.SetTemp - $ccdTemp) -lt 8)
                     } | select-object -first 1
                     if($masterDark){
-                        Write-Warning "No master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp. Attempting to scale temperature."
-                        return
+                        Write-Warning "No master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp. Scaling dark."
                     }
                     else{
                         Write-Warning "No master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp. Using bias only."
-                        return 
+                        #return
                     }
                 }
                 else{
-                    Write-Warning "No master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp. Using bias only."
+                    Write-Warning "No master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp. Skipping."
                     return 
                 }
             }
@@ -203,27 +194,7 @@ while($true){
                     $filter = $_.Group[0].Filter
                     $focalLength=$_.Group[0].FocalLength
 
-                    #$masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20221119.MasterFlatCal.$($filter).xisf"
-                    $masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20230613.MasterFlatCal.$($filter).xisf"
-                    #$masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20230607.MasterFlatCal.$($filter).LSPR.RemoveMMT1.xisf"
-                    #$masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20221224.MasterFlatCal.$($filter).Bin2x.Rot90.Upsample.xisf"
-
-                    #if(-not (test-path $masterFlat)){
-                    #    $masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20221114.MasterFlatCal.$($filter).xisf"
-                    #}
-
-                    # if($filter -in @('L','R','G','B')){
-                    #     $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20220802.MasterFlatCal.$($filter).xisf" #45 deg
-                    #     #$masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20220831.MasterFlatCal.$($filter).xisf" #35 deg
-                    #     #$masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20220918.MasterFlatCal.$($filter).ReverseDirection.xisf" #45 deg
-                    # }
-                    # elseif($filter -eq 'Sii3'){
-                    #     $masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20220802.MasterFlatCal.$($filter).xisf"
-                    # }
-                    # else{
-                    #     $masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20220718.MasterFlatCal.$($filter)_coscor.xisf"
-                    # }
-
+                    $masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20231026.MasterFlatCal.$($filter).xisf"
 
                     if($masterFlat -and (-not (test-path $masterFlat))) {
                         Write-Warning "Skipping $($_.Group.Count) frames at ($focalLength)mm with filter $filter. Reason: No master flat was found."

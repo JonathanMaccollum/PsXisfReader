@@ -1,5 +1,5 @@
 Import-Module PsXisfReader
-$path = "H:\PixInsightLT\Calibrated"
+$path = "F:\PixInsightLT\Calibrated"
 Get-ChildItem $path -File |
     Get-XisfFitsStats |
     Where-Object Object -ne $null |

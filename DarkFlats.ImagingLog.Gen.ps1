@@ -321,7 +321,6 @@ Function Out-TargetWorkInProgressPage
 title: $object
 date: $($mostRecentThumbnail.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss'))
 tags: 
-- $object
 - $($focalLength)mm
 - $instrument
 - $telescope
@@ -335,7 +334,7 @@ tags:
 "
     $thumbnails | 
         Where-Object {-not $_.Url.Contains("Annotated")} |
-        where-object {-not $_.Details} |
+        #where-object {-not $_.Details} |
         Select-Object -First 3 |
         foreach-object {
             if($_.Details){
@@ -350,13 +349,13 @@ tags:
 }
 
 @(
-    40
-    50
-    90
-    135
+    #40
+    #50
+    #90
+    #135
     350
     950
-    1000
+    #1000
     )|ForEach-Object{
         $focalLength=$_
 

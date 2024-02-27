@@ -5,31 +5,16 @@ $WarningPreference="Continue"
 $DropoffLocation = "D:\Backups\Camera\Dropoff\NINACS"
 $ArchiveDirectory="E:\Astrophotography"
 $CalibratedOutput = "E:\Calibrated\350mm"
-
 <#
 Invoke-BiasFrameSorting `
     -DropoffLocation $DropoffLocation `
     -ArchiveDirectory $ArchiveDirectory `
-    -PixInsightSlot 201 `
-    -Verbose 
+    -PixInsightSlot 201 -KeepOpen
 Invoke-DarkFrameSorting `
     -DropoffLocation $DropoffLocation `
     -ArchiveDirectory $ArchiveDirectory `
-    -PixInsightSlot 201 `
-    -Verbose -KeepOpen
-Invoke-DarkFlatFrameSorting `
-    -DropoffLocation $DropoffLocation `
-    -ArchiveDirectory $ArchiveDirectory `
-    -PixInsightSlot 201
-Invoke-FlatFrameSorting `
-    -DropoffLocation $DropoffLocation `
-    -ArchiveDirectory $ArchiveDirectory `
-    -CalibratedFlatsOutput "E:\Calibrated\CalibratedFlats" `
-    -PixInsightSlot 201
-
-exit
-#>
-#exit
+    -PixInsightSlot 201 -KeepOpen
+    #>
 
 $PushToLightBucket=$true
 $BiasLibraryFiles=Get-MasterBiasLibrary `
@@ -58,13 +43,13 @@ $DarkLibrary=($DarkLibraryFiles|group-object Instrument,Gain,Offset,Exposure,Set
     }
 })
 
-<#
 Invoke-FlatFrameSorting `
     -DropoffLocation $DropoffLocation `
     -ArchiveDirectory $ArchiveDirectory `
     -CalibratedFlatsOutput "E:\Calibrated\CalibratedFlats" `
-    -PixInsightSlot 201 -UseBias -BiasLibraryFiles $BiasLibraryFiles -KeepOpen 
-#>
+    -PixInsightSlot 201 -UseBias -BiasLibraryFiles $BiasLibraryFiles #-KeepOpen 
+    
+exit
 #Install-module ResizeImageModule
 Import-Module ResizeImageModule
 Import-module "C:\Program Files\N.I.N.A. - Nighttime Imaging 'N' Astronomy\NINA.Astrometry.dll"
@@ -134,21 +119,26 @@ Function Update-LightBucketWithNewImageCaptured
 }
 
 while($true){
-
+    # $x=Get-ChildItem $DropoffLocation *.xisf -ErrorAction Continue |
+    #     foreach-object { try{ $_ | Get-XisfFitsStats -ErrorAction Continue}catch{} }|
+    #     where-object Instrument -eq "QHY600m" |
+    #     where-object ImageType -eq "LIGHT" |
+    #     where-object FocalLength -eq "1000" |
+    #     where-object Object -ne "Snapshot" |
+    #     where-object Geometry -eq "9576:6388:1"
     Get-ChildItem $DropoffLocation *.xisf -ErrorAction Continue |
         foreach-object { try{ $_ | Get-XisfFitsStats -ErrorAction Continue}catch{} }|
         where-object Instrument -eq "QHY600m" |
         where-object ImageType -eq "LIGHT" |
         where-object FocalLength -eq "350" |
         where-object Geometry -eq "9576:6388:1" |
-        where-object ReadoutMode -in @("Extend Fullwell 2CMS","High Gain Mode 16BIT")|
-        #where-object Gain -eq 0 |
+        #where-object Exposure -eq 10 |
         #where-object Offset -eq 65 |
-        #where-object Object -eq "Orion on 48 Ori" |
-        #where-object Filter -in @("L3","R","G","B") |
-        #where-object Filter -eq "Oiii6nm" |
-        #where-object {$_.Object.StartsWith("C2022 E3 ZTF Widefield Take 9")} |
-        #select-object -first 30 |
+        #where-object ObsDateMinus12hr -eq "2024-02-21" |
+        #where-object {$_.Object.Contains("Sh2-240")} |
+        #where-object Filter -eq "Ha" |
+        #where-object Filter -eq "Ha6nmMaxFR" |
+        #select-object -first 1 |
         group-object Instrument,SetTemp,Gain,Offset,Exposure |
         foreach-object {
             $lights = $_.Group
@@ -160,7 +150,6 @@ while($true){
             $exposure=[decimal]$x.Exposure
             $ccdTemp = [decimal]$x.CCDTemp
             $setTemp=[decimal]$x.SetTemp
-
             $masterBias = $BiasLibraryFiles |
                 where-object Gain -eq $gain |
                 where-object Offset -eq $offset |
@@ -180,7 +169,7 @@ while($true){
                 ($dark.Gain-eq $gain) -and
                 ($dark.Offset-eq $offset) -and
                 ($dark.Exposure-eq $exposure) -and
-                ([Math]::abs($dark.SetTemp - $ccdTemp) -lt 9)
+                ([Math]::abs($dark.SetTemp - $ccdTemp) -lt 4)
             } | select-object -first 1
 
             if(-not $masterDark){
@@ -190,30 +179,50 @@ while($true){
                         ($dark.Instrument-eq $instrument) -and
                         ($dark.Gain-eq $gain) -and
                         ($dark.Offset-eq $offset) -and
-                        ($dark.Exposure-eq $exposure)
+                        ($dark.Exposure-eq $exposure) -and
+                        ([Math]::abs($dark.SetTemp - $ccdTemp) -lt 8)
                     } | select-object -first 1
                     if($masterDark){
-                        Write-Warning "No master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp. Attempting to scale temperature."
+                        Write-Warning "No master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp. Scaling dark."
                     }
                     else{
                         Write-Warning "No master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp. Using bias only."
+                        #return 
                     }
                 }
                 else{
-                    Write-Warning "No master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp. Using bias only."
+                    Write-Warning "No master dark available for $instrument at Gain=$gain Offset=$offset Exposure=$exposure (s) and SetTemp $setTemp. Skipping."
+                    return 
                 }
             }
-            if(-not ($masterDark -or $masterBias)){
-                write-warning "Skipping $($lights.Count) light frames: either a master dark or a master bias is required."
-                return
-            }
             $lights |
-                group-object Filter,FocalLength |
+                group-object Filter,FocalLength,FocalRatio |
                 foreach-object {
                     $filter = $_.Group[0].Filter
                     $focalLength=$_.Group[0].FocalLength
 
-                    $masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20230423.MasterFlatCal.$filter.xisf"
+                    #$masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20221119.MasterFlatCal.$($filter).xisf"
+                    $masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20240224.MasterFlatCal.$($filter).xisf"
+                    #$masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20230607.MasterFlatCal.$($filter).LSPR.RemoveMMT1.xisf"
+                    #$masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20221224.MasterFlatCal.$($filter).Bin2x.Rot90.Upsample.xisf"
+
+                    #if(-not (test-path $masterFlat)){
+                    #    $masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20221114.MasterFlatCal.$($filter).xisf"
+                    #}
+
+                    # if($filter -in @('L','R','G','B')){
+                    #     $masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20220802.MasterFlatCal.$($filter).xisf" #45 deg
+                    #     #$masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20220831.MasterFlatCal.$($filter).xisf" #35 deg
+                    #     #$masterFlat = "E:\Astrophotography\$($focalLength)mm\Flats\20220918.MasterFlatCal.$($filter).ReverseDirection.xisf" #45 deg
+                    # }
+                    # elseif($filter -eq 'Sii3'){
+                    #     $masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20220802.MasterFlatCal.$($filter).xisf"
+                    # }
+                    # else{
+                    #     $masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20220718.MasterFlatCal.$($filter)_coscor.xisf"
+                    # }
+
+
                     if($masterFlat -and (-not (test-path $masterFlat))) {
                         Write-Warning "Skipping $($_.Group.Count) frames at ($focalLength)mm with filter $filter. Reason: No master flat was found."
                     }
@@ -229,15 +238,11 @@ while($true){
                         if($masterDark) {
                             Write-Host " Dark: $($masterDark.Path)"
                         }
-                        if($masterFlat){
-                            Write-Host " Flat: $($masterFlat)"
-                        }
+                        Write-Host " Flat: $($masterFlat)"
                         
                         Invoke-LightFrameSorting `
                             -XisfStats ($_.Group) -ArchiveDirectory $ArchiveDirectory `
-                            -MasterBias $masterBiasFile `
-                            -OptimizeDark:$OptimizeDark `
-                            -CalibrateDark:$calibrateDark `
+                            -MasterBias $masterBiasFile -OptimizeDark:$OptimizeDark -CalibrateDark:$calibrateDark `
                             -MasterDark $masterDarkFile `
                             -MasterFlat $masterFlat `
                             -OutputPath $CalibratedOutput `
@@ -246,7 +251,7 @@ while($true){
                             -Verbose `
                             -AfterImagesCalibrated {
                                 param($LightFrames)
-                               
+
                                 if(-not $PushToLightBucket){
                                     return;
                                 }
@@ -260,7 +265,7 @@ while($true){
                                         
                                         if($LightFrame -eq $Last){
                                             try{
-                                                $OutputFolder = Join-Path $CalibratedOutput $LightFrame.Object
+                                                $OutputFolder = Join-Path $CalibratedOutput $LightFrame.Object.Trim()
                                                 $calibrated=Get-CalibrationFile -Path ($LightFrame.Path) -CalibratedPath $OutputFolder
                                                 $fileName = [System.IO.Path]::GetFileNameWithoutExtension($LightFrame.Path)
                                                 $ThumbnailFolder = Join-Path $OutputFolder "Thumbnails"
@@ -289,5 +294,5 @@ while($true){
             }
         }
     write-host "waiting for next set of data..."
-    Wait-Event -Timeout 30
+    Wait-Event -Timeout 60
 }
