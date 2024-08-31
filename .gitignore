@@ -2,3 +2,4 @@ Targets/**
 Timelapses/ffmpeg-master-latest-win64-gpl/**
 *.csv
 *.json
+*.db

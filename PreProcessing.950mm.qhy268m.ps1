@@ -19,16 +19,24 @@ Invoke-DarkFrameSorting `
     #>
 
 $PushToLightBucket=$true
-$BiasLibraryFiles=Get-MasterBiasLibrary `
+[Array]$BiasLibraryFiles=Get-MasterBiasLibrary `
     -Path "E:\Astrophotography\BiasLibrary\QHY268M" `
-    -Pattern "^(?<date>\d+).MasterBias.Gain.(?<gain>\d+).Offset.(?<offset>\d+).2CMS-1.USB33.(?<numberOfExposures>\d+)x(?<exposure>\d+\.?\d*)s.xisf$" ||
+    -Pattern "^(?<date>\d+).MasterBias.Gain.(?<gain>\d+).Offset.(?<offset>\d+).2CMS-1.USB33.(?<numberOfExposures>\d+)x(?<exposure>\d+\.?\d*)s.xisf$" |
     where-object Geometry -eq "6252:4176:1" |
     where-object ObsDateMinus12hr -gt "2023-03-22" |
     group-object Gain,Offset |
     foreach-object {
         $_.Group | sort-object NumberOfExposures -Descending | Select-Object -First 1
     }
-
+$BiasLibraryFiles = $BiasLibraryFiles + (Get-MasterBiasLibrary `
+    -Path "E:\Astrophotography\BiasLibrary\QHY268M" `
+    -Pattern "^(?<date>\d+).MasterBias.Gain.(?<gain>\d+).Offset.(?<offset>\d+).(?<numberOfExposures>\d+)x(?<exposure>\d+\.?\d*)s.xisf$" |
+    where-object Geometry -eq "6252:4176:1" |
+    where-object ObsDateMinus12hr -gt ([DateTime]"2024-03-01") |
+    group-object Gain,Offset |
+    foreach-object {
+        $_.Group | sort-object NumberOfExposures -Descending | Select-Object -First 1
+    })
 $BiasLibraryFiles|format-table UsbLimit,numberOfExposures,Instrument,Gain,Offset,ReadoutMode
 
 $DarkLibraryFiles=Get-MasterDarkLibrary `
@@ -142,11 +150,11 @@ while($true){
         where-object ImageType -eq "LIGHT" |
         where-object FocalLength -eq "950" |
         where-object Geometry -eq "6252:4176:1" |
-        where-object ReadoutMode -in @("High Gain 2CMS") |
+        #where-object ReadoutMode -in @("High Gain 2CMS") |
         #where-object Object -ne "M 33" |
         #where-object ObsDateMinus12hr -le "2024-01-29" |
         #where-object Filter -eq "B" |
-        group-object Instrument,SetTemp,Gain,Offset,Exposure |
+        group-object Instrument,SetTemp,Gain,Offset,Exposure,ObsDateMinus12hr |
         foreach-object {
             $lights = $_.Group
             $x=$lights[0]
@@ -157,6 +165,8 @@ while($true){
             $exposure=[decimal]$x.Exposure
             $ccdTemp = [decimal]$x.CCDTemp
             $setTemp=[decimal]$x.SetTemp
+            $obsDateMinus12hr=$x.ObsDateMinus12hr.ToString('yyyyMMdd')
+
             $masterBias = $BiasLibraryFiles |
                 where-object Gain -eq $gain |
                 where-object Offset -eq $offset |
@@ -208,8 +218,9 @@ while($true){
                     $filter = $_.Group[0].Filter
                     $focalLength=$_.Group[0].FocalLength
 
-                    $masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20240214.MasterFlatCal.$($filter).xisf"
-
+                    $masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\$($obsDateMinus12hr).MasterFlatCal.$($filter).xisf"
+                    #$masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20240823.MasterFlatCal.$($filter).xisf"
+                    
                     if($masterFlat -and (-not (test-path $masterFlat))) {
                         Write-Warning "Skipping $($_.Group.Count) frames at ($focalLength)mm with filter $filter. Reason: No master flat was found."
                     }

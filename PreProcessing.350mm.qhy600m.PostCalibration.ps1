@@ -13,7 +13,7 @@ $targets = @(
      #"E:\Astrophotography\350mm\Angler and Dark Shark"
      #"E:\Astrophotography\350mm\vdB 14 and vdb 15"
      #"E:\Astrophotography\350mm\Barnard 22"
-     "E:\Astrophotography\350mm\Crescent Region"
+     #"E:\Astrophotography\350mm\Crescent Region"
      #"E:\Astrophotography\350mm\Flaming Star Region"
      #"E:\Astrophotography\350mm\Lynx Panel 1"
      #"E:\Astrophotography\350mm\Lynx Panel 2"
@@ -37,6 +37,12 @@ $targets = @(
      #"E:\Astrophotography\350mm\Melotte 20"
      #"E:\Astrophotography\350mm\Melotte 111 Take 2"
      #"E:\Astrophotography\350mm\LBN 406 in Draco"
+     #"E:\Astrophotography\350mm\Sh2-129 Ou4 Barnard 148 354"
+     #"E:\Astrophotography\350mm\Kappa Borealis"
+     #"E:\Astrophotography\350mm\Hercules - Nebula and DolDzim7"
+     #"E:\Astrophotography\350mm\Dirty Cygnus"
+     #"E:\Astrophotography\350mm\Vulpecula - LDN 792 LDN 784 LDN 768 and Stock 1"
+     "E:\Astrophotography\350mm\Vulpecula - LDN 741 and Coat Hangar"
 )
 $referenceImages = @(
      "Cygnus on HD192985.Ha6nmMaxFR.46x360s.LF.LSPR.xisf"
@@ -64,6 +70,12 @@ $referenceImages = @(
      "MosaicByCoords.Framing.P3.xisf"
      "Melotte 111 Take 2.G.2x180s.G.4x360s.LF.xisf"
      "LBN 406 in Draco.G.11x360s.LF.xisf"
+     "Melotte 20.G.12x360s.PC.LSPR.xisf"
+     "Sh2-129 Ou4 Barnard 148 354.Ha3nm.8x360s.Ha3nm.18x720s.LF.xisf"
+     "Kappa Borealis.R.33x360s.LF.LSPR.xisf"
+     "Dirty Cygnus.R.12x360s.ESD2.xisf"
+     "Vulpecula - LDN 792 LDN 784 LDN 768 and Stock 1.R.27x360s.ESD.LSPR.xisf"
+     "Vulpecula - LDN 741 and Coat Hangar.R.19x360s.ESD.LSPR.xisf"
 )
 
 $targets | foreach-object {
@@ -86,13 +98,14 @@ $targets | foreach-object {
         where-object Instrument -eq "QHY600M" |
         Where-Object {-not $_.HasTokensInPath(@("reject","process","planning","testing","clouds","draft","cloudy","_ez_LS_","drizzle","quick"))} |
         where-object Geometry -eq "9576:6388:1" |
-        #Where-Object Filter -eq "Oiii5nm" |
+        #where-object ReadoutMode -eq "2CMS-0" |
         #Where-Object {-not $_.Filter.Contains("Oiii")} |
         #Where-Object Exposure -eq 360 |
         #Where-Object FocalRatio -eq "5.6" |
-        #Where-Object Filter -in @("R") |
+        #Where-Object Filter -eq "L" |
+        #Where-Object Filter -in @('Sii25nm','Ha3nm') |
         #Where-Object Gain -eq 26 |
-        #Where-object ObsDateMinus12hr -eq ([DateTime]"2024-02-20")
+        #Where-object ObsDateMinus12hr -eq ([DateTime]"2024-03-09")
         Where-Object {-not $_.IsIntegratedFile()} #|
         #select-object -First 30
     #$rawSubs|Format-Table Path,*
@@ -116,7 +129,7 @@ $targets | foreach-object {
         if((Read-Host -Prompt "Found $($uncalibrated.Count) uncalibrated files. Relocate to dropoff?") -eq "Y"){
             $uncalibrated |
                 foreach-object {
-                    Move-Item $_.Path "D:\Backups\Camera\Dropoff\NINA" -verbose
+                    Move-Item $_.Path "D:\Backups\Camera\Dropoff\NINACS" -verbose
                 }
         }
         exit
@@ -143,7 +156,7 @@ $targets | foreach-object {
         -IntegratedImageOutputDirectory $target `
         -AlignmentReference $alignmentReference `
         -GenerateDrizzleData `
-        -ApprovalExpression "Median<142 && FWHM<5.5 && Stars > 1000" `
+        -ApprovalExpression "Median<40 && FWHM<1.65 && Stars > 8000" `
         -WeightingExpression "PSFSignalWeight" `
         -Rejection $rejectionMethod `
         -GenerateThumbnail `

@@ -55,11 +55,11 @@ $DarkLibrary=($DarkLibraryFiles|group-object Instrument,Gain,Offset,Exposure,Set
 })
 
 while($true){
-    $toCalibrate=Get-ChildItem $DropoffLocation/"2023-05-24" *.xisf -ErrorAction Continue |
+    $toCalibrate=Get-ChildItem $DropoffLocation/"2024-05-12" *.xisf -ErrorAction Continue |
         foreach-object { try{ $_ | Get-XisfFitsStats -ErrorAction Continue}catch{} }|
         where-object Instrument -eq "ZWO ASI678MC" |
         where-object ImageType -eq "LIGHT" |
-        where-object Object -eq "All-Sky 20230524 Ride along" |
+        #where-object Object -eq "All-Sky 20230831 Ride along" |
         #where-object FocalLength -eq "135" |
         #where-object Offset -eq 65 |
         #where-object Object -eq "m101 at 135mm P1" |

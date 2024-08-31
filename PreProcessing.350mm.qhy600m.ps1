@@ -49,7 +49,7 @@ Invoke-FlatFrameSorting `
     -CalibratedFlatsOutput "E:\Calibrated\CalibratedFlats" `
     -PixInsightSlot 201 -UseBias -BiasLibraryFiles $BiasLibraryFiles #-KeepOpen 
     
-exit
+#exit
 #Install-module ResizeImageModule
 Import-Module ResizeImageModule
 Import-module "C:\Program Files\N.I.N.A. - Nighttime Imaging 'N' Astronomy\NINA.Astrometry.dll"
@@ -132,6 +132,7 @@ while($true){
         where-object ImageType -eq "LIGHT" |
         where-object FocalLength -eq "350" |
         where-object Geometry -eq "9576:6388:1" |
+        #where-object Object -eq "LBN 406 in Draco" |
         #where-object Exposure -eq 10 |
         #where-object Offset -eq 65 |
         #where-object ObsDateMinus12hr -eq "2024-02-21" |
@@ -139,7 +140,7 @@ while($true){
         #where-object Filter -eq "Ha" |
         #where-object Filter -eq "Ha6nmMaxFR" |
         #select-object -first 1 |
-        group-object Instrument,SetTemp,Gain,Offset,Exposure |
+        group-object Instrument,SetTemp,Gain,Offset,Exposure,ObsDateMinus12hr |
         foreach-object {
             $lights = $_.Group
             $x=$lights[0]
@@ -150,6 +151,8 @@ while($true){
             $exposure=[decimal]$x.Exposure
             $ccdTemp = [decimal]$x.CCDTemp
             $setTemp=[decimal]$x.SetTemp
+            $obsDateMinus12hr=$x.ObsDateMinus12hr.ToString('yyyyMMdd')
+
             $masterBias = $BiasLibraryFiles |
                 where-object Gain -eq $gain |
                 where-object Offset -eq $offset |
@@ -202,7 +205,11 @@ while($true){
                     $focalLength=$_.Group[0].FocalLength
 
                     #$masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20221119.MasterFlatCal.$($filter).xisf"
-                    $masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20240224.MasterFlatCal.$($filter).xisf"
+                    $masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\$($obsDateMinus12hr).MasterFlatCal.$($filter).xisf"
+                    #$masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20240710.MasterFlatCal.$($filter).xisf"
+                    #$masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20240622.MasterFlatCal.$($filter).xisf"
+                    #$masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20240510.MasterFlatCal.$($filter).xisf"
+                    #$masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20240328.MasterFlatCal.$($filter).xisf"
                     #$masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20230607.MasterFlatCal.$($filter).LSPR.RemoveMMT1.xisf"
                     #$masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20221224.MasterFlatCal.$($filter).Bin2x.Rot90.Upsample.xisf"
 

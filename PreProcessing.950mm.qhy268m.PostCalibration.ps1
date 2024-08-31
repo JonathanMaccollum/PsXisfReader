@@ -42,7 +42,12 @@ $targets = @(
      #"E:\Astrophotography\950mm\Ursa Major on HD 83489"
      #"E:\Astrophotography\950mm\M63 Take 2"
      #"E:\Astrophotography\950mm\PK 164 31.1"
-     "E:\Astrophotography\950mm\NGC 2633 and NGC 2634"
+     #"E:\Astrophotography\950mm\NGC 2633 and NGC 2634"
+     #"E:\Astrophotography\950mm\LBN415 feature in Draco"
+     #"E:\Astrophotography\950mm\Barnard 343 Region in Cygnus"
+     #"E:\Astrophotography\950mm\Sh2-108 Take 3"
+     "E:\Astrophotography\950mm\NGC6979 - Pickerings Triangular Wisp"
+     #"E:\Astrophotography\950mm\NGC 281 - Pacman"
 )
 $referenceImages = @(
     "M45 Take 2.L.31x90s.PSFSW.ESD.xisf"
@@ -68,6 +73,12 @@ $referenceImages = @(
     "_Barnard 3 and 4.L.128x180s.L.27x360s.ESD.NewFlats.xisf"
     "Cone and Fox Fur.Ha3nm.16x360s.ESD.xisf"
     "PK 164 31.1.Ha3nm.155x360s.ESD.LSPR.LN.xisf"
+    "NGC 2633 and NGC 2634.R.120x360s.LF.LN.LSPR.xisf"
+    "LBN415 feature in Draco.B.153x360s.LF.LSPR.xisf"
+    "Barnard 343 Region in Cygnus.R.18x360s.LF.xisf"
+    "Sh2-108 Take 3.R.29x360s.LF.LSPR.xisf"
+    "NGC6979 - Pickerings Triangular Wisp.R.23x360s.ESD.LSPR.xisf"
+
 )
 
 
@@ -100,7 +111,7 @@ $targets | foreach-object {
         #Where-Object Exposure -eq 10 |
         #Where-Object FocalRatio -eq "5.6" |
         #Where-Object Filter -ne "Oiii" |
-        #Where-Object Filter -eq "R" |
+        #Where-Object Filter -eq "L" |
         #Where-Object Exposure -eq 180 |
         #Where-Object Filter -ne "G" |
         #Where-Object Filter -ne "B" |
