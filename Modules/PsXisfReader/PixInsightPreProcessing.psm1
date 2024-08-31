@@ -1063,14 +1063,14 @@ Function Invoke-FlatFrameSorting
     
     
     $toProcess|
-        group-object Filter,FocalLength,Gain,Offset |
+        group-object Filter,FocalLength,Gain,Offset,ObsDateMinus12hr |
         foreach-object {
             $flats=$_.Group
             $gain=$flats[0].Gain
             $offset=$flats[0].Offset
             $filter=$flats[0].Filter.Trim()
             $focalLength=($flats[0].FocalLength.ToString().TrimEnd('mm'))+'mm'
-            $flatDate = ([DateTime]$flats[0].LocalDate).Date.ToString('yyyyMMdd')
+            $flatDate = ([DateTime]$flats[0].ObsDateMinus12hr).Date.ToString('yyyyMMdd')
 
             Write-Host "Processing $($flats.Count) Flats for filter '$filter' at $focalLength"
 

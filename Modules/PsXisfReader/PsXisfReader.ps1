@@ -52,17 +52,20 @@ Function Read-XisfSignature([System.IO.BinaryReader]$reader)
     $reader.Read($buffer,0,8)>$null
     [System.String]::new($buffer)
 }
-Function Read-XisfHeader([System.IO.BinaryReader]$reader)
+Function Read-XisfHeader([System.IO.BinaryReader]$reader,[Switch]$Raw)
 {
     $length = $reader.ReadUInt32()
     $buffer=[char[]]::new(4)
     $reader.Read($buffer,0,4)>$null
     $header=[byte[]]::new($length)
     $reader.Read($header,0,$length)>$null
-
+    if($Raw){
+        return [System.Text.Encoding]::UTF8.GetString($header)
+    }
     $memoryStream=[System.IO.MemoryStream]::new($header)
     try
     {
+        
         $xmlReader=[System.Xml.XmlReader]::Create($memoryStream)
         try
         {
@@ -92,7 +95,7 @@ Function Get-XisfHeader
     [OutputType([xml])]
     param
     (
-        [Parameter(ValueFromPipeline=$true,Mandatory=$true)][System.IO.FileInfo]$Path
+        [Parameter(ValueFromPipeline=$true,Mandatory=$true)][System.IO.FileInfo]$Path,[Switch]$Raw
     )
     process{
         $stream = [System.IO.File]::OpenRead($Path.FullName)
@@ -101,7 +104,7 @@ Function Get-XisfHeader
         {
             Read-XisfSignature $reader > $null
             
-            Read-XisfHeader $reader
+            Read-XisfHeader $reader -Raw:$Raw.IsPresent
         }
         finally
         {
