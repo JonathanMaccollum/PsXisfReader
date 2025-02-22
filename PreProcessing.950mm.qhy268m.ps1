@@ -3,7 +3,7 @@ if (-not (get-module psxisfreader)){import-module psxisfreader}
 $ErrorActionPreference="STOP"
 $WarningPreference="Continue"
 $DropoffLocation = "D:\Backups\Camera\Dropoff\NINA"
-$ArchiveDirectory="E:\Astrophotography"
+$ArchiveDirectory="W:\Astrophotography"
 $CalibratedOutput = "E:\Calibrated\950mm"
 <#
 Invoke-BiasFrameSorting `
@@ -20,7 +20,7 @@ Invoke-DarkFrameSorting `
 
 $PushToLightBucket=$true
 [Array]$BiasLibraryFiles=Get-MasterBiasLibrary `
-    -Path "E:\Astrophotography\BiasLibrary\QHY268M" `
+    -Path "W:\Astrophotography\BiasLibrary\QHY268M" `
     -Pattern "^(?<date>\d+).MasterBias.Gain.(?<gain>\d+).Offset.(?<offset>\d+).2CMS-1.USB33.(?<numberOfExposures>\d+)x(?<exposure>\d+\.?\d*)s.xisf$" |
     where-object Geometry -eq "6252:4176:1" |
     where-object ObsDateMinus12hr -gt "2023-03-22" |
@@ -29,7 +29,7 @@ $PushToLightBucket=$true
         $_.Group | sort-object NumberOfExposures -Descending | Select-Object -First 1
     }
 $BiasLibraryFiles = $BiasLibraryFiles + (Get-MasterBiasLibrary `
-    -Path "E:\Astrophotography\BiasLibrary\QHY268M" `
+    -Path "W:\Astrophotography\BiasLibrary\QHY268M" `
     -Pattern "^(?<date>\d+).MasterBias.Gain.(?<gain>\d+).Offset.(?<offset>\d+).(?<numberOfExposures>\d+)x(?<exposure>\d+\.?\d*)s.xisf$" |
     where-object Geometry -eq "6252:4176:1" |
     where-object ObsDateMinus12hr -gt ([DateTime]"2024-03-01") |
@@ -40,7 +40,7 @@ $BiasLibraryFiles = $BiasLibraryFiles + (Get-MasterBiasLibrary `
 $BiasLibraryFiles|format-table UsbLimit,numberOfExposures,Instrument,Gain,Offset,ReadoutMode
 
 $DarkLibraryFiles=Get-MasterDarkLibrary `
-    -Path "E:\Astrophotography\DarkLibrary\QHY268M" `
+    -Path "W:\Astrophotography\DarkLibrary\QHY268M" `
     -Pattern "^(?<date>\d+).MasterDark.Gain.(?<gain>\d+).Offset.(?<offset>\d+).(?<temp>-?\d+)C.(?<numberOfExposures>\d+)x(?<exposure>\d+)s.xisf$" |
     where-object Geometry -eq "6252:4176:1" |
     where-object ObsDateMinus12hr -gt "2023-03-22" |
@@ -69,6 +69,36 @@ $DarkLibrary=($DarkLibraryFiles|group-object Instrument,Gain,Offset,Exposure,Set
 
 #restack data from 12-30 and newer
 
+# move all morning flats to "Flats" folder
+Get-XisfFile -Path $DropoffLocation | 
+    where-object ImageType -eq "Flat" | 
+    where-object {$_.LocalDate.Hour -lt 12} |
+    foreach-object {
+        move-item $_.Path -Destination $DropoffLocation\Flats\
+    }
+$toCalibrate = 
+    Get-XisfLightFrames -Path $DropoffLocation |
+    group-object ObsDateMinus12hr,Filter |
+    foreach-object {new-object psobject -property @{ObsDateMinus12hr=$_.Group[0].ObsDateMinus12hr;Filter=$_.Group[0].Filter}}
+Get-XisfFile -Path $DropoffLocation | 
+    where-object ImageType -eq "Flat" | 
+    group-object ObsDateMinus12hr,Filter|
+    foreach-object {
+        $filter=$_.Group[0].Filter
+        $obsDateMinus12hr=$_.Group[0].ObsDateMinus12hr
+        if(-not ($toCalibrate | where-object Filter -eq $filter | where-object ObsDateMinus12hr -eq $obsDateMinus12hr)){
+            write-host "No Lights on $obsDateMinus12hr with filter $filter"
+            $_.Group | foreach-object {
+                move-item $_.Path -Destination $DropoffLocation\Flats\ -whatif
+            }
+        }
+    }
+    <#
+Get-XisfFile -Path $DropoffLocation | 
+    where-object ImageType -eq "Flat" | 
+    group-object ObsDateMinus12hr,Filter |
+    select-object Name,Count
+#>
 Invoke-FlatFrameSorting `
     -DropoffLocation $DropoffLocation `
     -ArchiveDirectory $ArchiveDirectory `
@@ -152,7 +182,7 @@ while($true){
         where-object Geometry -eq "6252:4176:1" |
         #where-object ReadoutMode -in @("High Gain 2CMS") |
         #where-object Object -ne "M 33" |
-        #where-object ObsDateMinus12hr -le "2024-01-29" |
+        #where-object ObsDateMinus12hr -le "2024-10-06" |
         #where-object Filter -eq "B" |
         group-object Instrument,SetTemp,Gain,Offset,Exposure,ObsDateMinus12hr |
         foreach-object {
@@ -218,8 +248,8 @@ while($true){
                     $filter = $_.Group[0].Filter
                     $focalLength=$_.Group[0].FocalLength
 
-                    $masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\$($obsDateMinus12hr).MasterFlatCal.$($filter).xisf"
-                    #$masterFlat ="E:\Astrophotography\$($focalLength)mm\Flats\20240823.MasterFlatCal.$($filter).xisf"
+                    $masterFlat ="W:\Astrophotography\$($focalLength)mm\Flats\$($obsDateMinus12hr).MasterFlatCal.$($filter).xisf"
+                    #$masterFlat ="W:\Astrophotography\$($focalLength)mm\Flats\20241008.MasterFlatCal.$($filter).xisf"
                     
                     if($masterFlat -and (-not (test-path $masterFlat))) {
                         Write-Warning "Skipping $($_.Group.Count) frames at ($focalLength)mm with filter $filter. Reason: No master flat was found."
@@ -246,7 +276,7 @@ while($true){
                             -OutputPath $CalibratedOutput `
                             -PixInsightSlot 201 `
                             -OutputPedestal 80 `
-                            -Verbose `
+                            -Verbose -KeepOpen `
                             -AfterImagesCalibrated {
                                 param($LightFrames)
 

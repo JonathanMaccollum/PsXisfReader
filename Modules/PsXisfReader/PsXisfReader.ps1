@@ -245,7 +245,7 @@ Function Get-XisfFitsStats
 
         if($result -and $result.Filter -and $TruncateFilterBandpass)
         {
-            $result.Filter = $result.Filter.Replace('5nm','').Replace('3nm','').Replace('6nm','').Replace("MaxFR",'')
+            $result.Filter = $result.Filter.Replace('25nm','').Replace('35nm','').Replace('5nm','').Replace('3nm','').Replace('6nm','').Replace("MaxFR",'')
         }
         if($result){
             Write-Output $result
